@@ -1,6 +1,6 @@
 /* Offline support: cache the app shell so it opens without a connection.
    Weather requests always go to the network (and fail gracefully offline). */
-const CACHE = "pressuresense-v3";
+const CACHE = "pressuresense-v4";
 const SHELL = [
   "./",
   "./index.html",

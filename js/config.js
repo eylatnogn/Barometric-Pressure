@@ -5,6 +5,7 @@ PS.config = {
   // Open-Meteo: free, no API key needed for non-commercial use.
   weatherBase: "https://api.open-meteo.com/v1/forecast",
   geocodeBase: "https://geocoding-api.open-meteo.com/v1/search",
+  airQualityBase: "https://air-quality-api.open-meteo.com/v1/air-quality",
 
   // A pressure change at/above this rate (hPa over the window) is worth a heads-up.
   // Vestibular/migraine sensitivity is commonly linked to swings of ~5-6 hPa.
@@ -39,3 +40,15 @@ PS.fmtPressureDelta = (hpaDelta, unit) => {
 };
 PS.toF = (c) => (c * 9) / 5 + 32;
 PS.fmtTemp = (c, unit) => (unit === "F" ? `${Math.round(PS.toF(c))}°F` : `${Math.round(c)}°C`);
+
+// US Air Quality Index categories. Returns label, a CSS color var, and a short
+// note geared toward people sensitive to environmental triggers.
+PS.aqiCategory = (aqi) => {
+  if (aqi == null || isNaN(aqi)) return { label: "—", color: "var(--text-dim)", note: "" };
+  if (aqi <= 50)  return { label: "Good", color: "var(--good)", note: "Air quality is clean — unlikely to add to symptoms." };
+  if (aqi <= 100) return { label: "Moderate", color: "var(--warn)", note: "Usually fine, but very sensitive people may notice mild effects." };
+  if (aqi <= 150) return { label: "Unhealthy for sensitive groups", color: "#e8731a", note: "May worsen headaches, fatigue, or sinus/respiratory symptoms." };
+  if (aqi <= 200) return { label: "Unhealthy", color: "var(--bad)", note: "Can trigger headaches, dizziness, and fatigue — limit time outdoors." };
+  if (aqi <= 300) return { label: "Very unhealthy", color: "#8e44ad", note: "Strong trigger potential — stay indoors with filtered air if you can." };
+  return { label: "Hazardous", color: "#7e2222", note: "Avoid outdoor exposure; symptoms are likely for sensitive people." };
+};

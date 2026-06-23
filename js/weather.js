@@ -64,5 +64,33 @@ PS.weather = (() => {
     };
   }
 
-  return { geocode, reverseName, fetchWeather };
+  // Air quality (US AQI + key pollutants), current plus a short hourly outlook.
+  async function fetchAirQuality(lat, lon) {
+    const params = new URLSearchParams({
+      latitude: lat,
+      longitude: lon,
+      current: "us_aqi,pm2_5,pm10,ozone",
+      hourly: "us_aqi",
+      forecast_days: "2",
+      timezone: "auto"
+    });
+    const res = await fetch(`${PS.config.airQualityBase}?${params}`);
+    if (!res.ok) throw new Error("Air quality request failed");
+    const data = await res.json();
+    const hours = (data.hourly?.time || []).map((t, i) => ({
+      t: new Date(t),
+      aqi: data.hourly.us_aqi[i]
+    })).filter((h) => h.aqi != null);
+    return {
+      current: {
+        aqi: data.current?.us_aqi,
+        pm25: data.current?.pm2_5,
+        pm10: data.current?.pm10,
+        ozone: data.current?.ozone
+      },
+      hours
+    };
+  }
+
+  return { geocode, reverseName, fetchWeather, fetchAirQuality };
 })();
