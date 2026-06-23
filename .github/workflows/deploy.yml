@@ -25,12 +25,10 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      # Requires a one-time setup: repo Settings -> Pages -> Build and
+      # deployment -> Source: "GitHub Actions". (The Actions token can't
+      # create the Pages site itself, so this toggle is done once by hand.)
       - uses: actions/configure-pages@v5
-        with:
-          # Create/enable the Pages site automatically so no manual toggle is
-          # needed (works once the repo is Pages-eligible: public, or private
-          # on a paid plan).
-          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: "."
