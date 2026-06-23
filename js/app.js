@@ -574,6 +574,17 @@
 
   $("#logNowBtn").addEventListener("click", () => { showView("log"); openWizard(); });
 
+  // Download the full Trends report as a PDF (built client-side in report.js).
+  $("#downloadReportBtn").addEventListener("click", () => {
+    if (!PS.store.getLogs().length) { toast("No entries yet to report"); return; }
+    try {
+      PS.report.generate();
+      toast("Report downloaded");
+    } catch {
+      toast("Couldn't build the report");
+    }
+  });
+
   /* ---------- TRENDS view ---------- */
   function renderTrends() {
     const logs = PS.store.getLogs();
