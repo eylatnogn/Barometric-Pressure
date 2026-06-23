@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#1a2a4f" />
+  <meta name="description" content="Track barometric pressure and weather to understand your vestibular, vertigo, and migraine symptoms." />
+  <title>PressureSense — Weather &amp; Wellness</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">◐</span>
+      <h1>PressureSense</h1>
+    </div>
+    <button id="locationBtn" class="location-btn" type="button" aria-label="Change location">
+      <span class="location-icon" aria-hidden="true">📍</span>
+      <span id="locationLabel">Set location</span>
+    </button>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <!-- NOW -->
+    <section id="view-now" class="view" aria-label="Current conditions">
+      <div id="alertBanner" class="alert-banner" hidden></div>
+
+      <div class="card hero-card">
+        <div class="hero-pressure">
+          <div class="pressure-value">
+            <span id="pressureNow">--</span>
+            <span id="pressureUnit" class="unit">hPa</span>
+          </div>
+          <div id="pressureTrend" class="pressure-trend">
+            <span id="trendArrow" class="trend-arrow" aria-hidden="true">→</span>
+            <span id="trendText">Loading…</span>
+          </div>
+        </div>
+        <p id="pressureMeaning" class="pressure-meaning">Reading the latest weather…</p>
+      </div>
+
+      <div class="stat-grid">
+        <div class="card stat">
+          <span class="stat-label">Change · 3 hr</span>
+          <span id="change3h" class="stat-value">--</span>
+        </div>
+        <div class="card stat">
+          <span class="stat-label">Change · 6 hr</span>
+          <span id="change6h" class="stat-value">--</span>
+        </div>
+        <div class="card stat">
+          <span class="stat-label">Change · 24 hr</span>
+          <span id="change24h" class="stat-value">--</span>
+        </div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="card stat">
+          <span class="stat-label">Temperature</span>
+          <span id="temp" class="stat-value">--</span>
+        </div>
+        <div class="card stat">
+          <span class="stat-label">Humidity</span>
+          <span id="humidity" class="stat-value">--</span>
+        </div>
+        <div class="card stat">
+          <span class="stat-label">Conditions</span>
+          <span id="conditions" class="stat-value sm">--</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">Pressure · last 24 hours</h2>
+        <canvas id="chartNow" class="chart" height="180" aria-label="Chart of barometric pressure over the last 24 hours"></canvas>
+      </div>
+
+      <button id="logNowBtn" class="primary-btn full" type="button">+ Log how I feel right now</button>
+    </section>
+
+    <!-- FORECAST -->
+    <section id="view-forecast" class="view" aria-label="Pressure forecast" hidden>
+      <div class="card">
+        <h2 class="card-title">Next 48 hours</h2>
+        <p class="card-sub">Watch for steep climbs or drops — rapid changes are the usual trigger.</p>
+        <canvas id="chartForecast" class="chart" height="200" aria-label="Chart of forecast barometric pressure"></canvas>
+      </div>
+      <div id="forecastList" class="forecast-list"></div>
+    </section>
+
+    <!-- LOG -->
+    <section id="view-log" class="view" aria-label="Symptom log" hidden>
+      <div class="card">
+        <h2 class="card-title">How are you feeling?</h2>
+        <form id="logForm">
+          <label class="field-label" for="severity">
+            Symptom severity: <strong id="severityOut">0 — none</strong>
+          </label>
+          <input id="severity" name="severity" type="range" min="0" max="10" value="0" step="1" class="slider" />
+
+          <fieldset class="symptom-set">
+            <legend>Symptoms (tap any that apply)</legend>
+            <div id="symptomChips" class="chips"></div>
+          </fieldset>
+
+          <label class="field-label" for="note">Notes (optional)</label>
+          <textarea id="note" name="note" rows="2" placeholder="e.g. dizzy this morning, took medication"></textarea>
+
+          <button type="submit" class="primary-btn full">Save entry</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="card-title-row">
+          <h2 class="card-title">Recent entries</h2>
+          <button id="exportBtn" class="text-btn" type="button">Export</button>
+        </div>
+        <ul id="logList" class="log-list"></ul>
+      </div>
+    </section>
+
+    <!-- TRENDS -->
+    <section id="view-trends" class="view" aria-label="Trends" hidden>
+      <div class="card">
+        <h2 class="card-title">Symptoms vs. pressure</h2>
+        <p class="card-sub">Your logged severity (dots) over recent pressure (line). Patterns emerge over a few weeks.</p>
+        <canvas id="chartTrends" class="chart" height="220" aria-label="Chart comparing symptom severity to barometric pressure"></canvas>
+      </div>
+      <div id="insightCard" class="card insight"></div>
+    </section>
+  </main>
+
+  <nav class="tabbar" aria-label="Main navigation">
+    <button class="tab active" data-view="now" type="button"><span class="tab-icon" aria-hidden="true">◐</span>Now</button>
+    <button class="tab" data-view="forecast" type="button"><span class="tab-icon" aria-hidden="true">📈</span>Forecast</button>
+    <button class="tab" data-view="log" type="button"><span class="tab-icon" aria-hidden="true">📝</span>Log</button>
+    <button class="tab" data-view="trends" type="button"><span class="tab-icon" aria-hidden="true">📊</span>Trends</button>
+  </nav>
+
+  <!-- Location dialog -->
+  <dialog id="locationDialog" class="dialog">
+    <form method="dialog" class="dialog-body">
+      <h2>Set your location</h2>
+      <button id="useGpsBtn" class="primary-btn full" type="button">📍 Use my current location</button>
+      <div class="divider"><span>or search</span></div>
+      <input id="citySearch" type="search" placeholder="City name, e.g. Denver" autocomplete="off" />
+      <ul id="cityResults" class="city-results"></ul>
+
+      <div class="settings-row">
+        <span>Pressure units</span>
+        <div class="seg" role="group" aria-label="Pressure units">
+          <button type="button" class="seg-btn" data-unit="hPa">hPa</button>
+          <button type="button" class="seg-btn" data-unit="inHg">inHg</button>
+        </div>
+      </div>
+      <div class="settings-row">
+        <span>Temperature units</span>
+        <div class="seg" role="group" aria-label="Temperature units">
+          <button type="button" class="seg-btn" data-tunit="C">°C</button>
+          <button type="button" class="seg-btn" data-tunit="F">°F</button>
+        </div>
+      </div>
+
+      <button class="text-btn close-btn" value="close" type="submit">Done</button>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="js/config.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/weather.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
