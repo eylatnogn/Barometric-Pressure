@@ -78,6 +78,17 @@
         </div>
       </div>
 
+      <div class="card aqi-card">
+        <div class="aqi-head">
+          <span class="card-title">Air quality</span>
+          <span id="aqiValue" class="aqi-value">--</span>
+        </div>
+        <div class="aqi-meter"><span id="aqiBar" class="aqi-bar"></span></div>
+        <div id="aqiLabel" class="aqi-label">Loading air quality…</div>
+        <p id="aqiNote" class="aqi-note muted"></p>
+        <div id="aqiPollutants" class="aqi-pollutants"></div>
+      </div>
+
       <div class="card">
         <h2 class="card-title">Pressure · last 24 hours</h2>
         <div class="chart-box"><canvas id="chartNow" class="chart" aria-label="Chart of barometric pressure over the last 24 hours"></canvas></div>
@@ -89,7 +100,13 @@
     <!-- FORECAST -->
     <section id="view-forecast" class="view" aria-label="Pressure forecast" hidden>
       <div class="card">
-        <h2 class="card-title">Next 48 hours</h2>
+        <h2 class="card-title">What this could mean for you</h2>
+        <p class="card-sub">Based on current and forecasted conditions. General guidance, not medical advice.</p>
+        <div id="symptomWatch" class="symptom-watch"></div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">Pressure · next 48 hours</h2>
         <p class="card-sub">Watch for steep climbs or drops — rapid changes are the usual trigger.</p>
         <div class="chart-box"><canvas id="chartForecast" class="chart" aria-label="Chart of forecast barometric pressure"></canvas></div>
       </div>
@@ -100,6 +117,10 @@
     <section id="view-log" class="view" aria-label="Symptom log" hidden>
       <div class="card">
         <h2 class="card-title">How are you feeling?</h2>
+        <p class="card-sub">This entry is stamped with the weather right now, so you can spot patterns later.</p>
+
+        <div id="logSnapshot" class="log-snapshot">Reading current conditions…</div>
+
         <form id="logForm">
           <label class="field-label" for="severity">
             Symptom severity: <strong id="severityOut">0 — none</strong>
@@ -114,15 +135,19 @@
           <label class="field-label" for="note">Notes (optional)</label>
           <textarea id="note" name="note" rows="2" placeholder="e.g. dizzy this morning, took medication"></textarea>
 
-          <button type="submit" class="primary-btn full">Save entry</button>
+          <div class="log-actions">
+            <button type="button" id="quickGoodBtn" class="ghost-btn">Feeling good ✓</button>
+            <button type="submit" class="primary-btn grow">Save entry</button>
+          </div>
         </form>
       </div>
 
       <div class="card">
         <div class="card-title-row">
-          <h2 class="card-title">Recent entries</h2>
-          <button id="exportBtn" class="text-btn" type="button">Export</button>
+          <h2 class="card-title">Your log</h2>
+          <button id="exportBtn" class="text-btn" type="button">Export CSV</button>
         </div>
+        <div id="logStats" class="log-stats"></div>
         <ul id="logList" class="log-list"></ul>
       </div>
     </section>

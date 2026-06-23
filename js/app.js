@@ -5,6 +5,7 @@
 
   let settings = PS.store.getSettings();
   let weatherData = null; // { current, series, tz }
+  let airData = null;     // { current:{aqi,pm25,pm10,ozone}, hours }
 
   /* ---------- helpers ---------- */
   function toast(msg) {
@@ -40,7 +41,7 @@
     if (name === "now") renderNow();
     if (name === "forecast") renderForecast();
     if (name === "trends") renderTrends();
-    if (name === "log") renderLogList();
+    if (name === "log") { renderSnapshot(); renderLogList(); }
   }
   $$(".tab").forEach((t) => t.addEventListener("click", () => showView(t.dataset.view)));
 
@@ -121,8 +122,132 @@
     banner.hidden = false;
   }
 
+  /* ---------- AIR QUALITY ---------- */
+  // Map a US AQI value to a position on the colored meter (matches the gradient
+  // breakpoints, which aren't linear in AQI).
+  function aqiToPercent(aqi) {
+    const stops = [[0, 0], [50, 25], [100, 50], [150, 70], [200, 85], [300, 100]];
+    if (aqi <= 0) return 0;
+    if (aqi >= 300) return 100;
+    for (let i = 1; i < stops.length; i++) {
+      const [a0, p0] = stops[i - 1], [a1, p1] = stops[i];
+      if (aqi <= a1) return p0 + ((aqi - a0) / (a1 - a0)) * (p1 - p0);
+    }
+    return 100;
+  }
+
+  function renderAirQuality() {
+    const cur = airData && airData.current;
+    const aqi = cur ? cur.aqi : null;
+    const cat = PS.aqiCategory(aqi);
+    $("#aqiValue").textContent = aqi != null ? Math.round(aqi) : "--";
+    $("#aqiValue").style.color = cat.color;
+    $("#aqiLabel").textContent = cat.label;
+    $("#aqiLabel").style.color = cat.color;
+    $("#aqiNote").textContent = cat.note;
+    $("#aqiBar").style.marginLeft = `${aqiToPercent(aqi || 0)}%`;
+
+    const pol = $("#aqiPollutants");
+    if (cur && (cur.pm25 != null || cur.pm10 != null || cur.ozone != null)) {
+      pol.innerHTML =
+        (cur.pm25 != null ? `<span>PM2.5 <b>${Math.round(cur.pm25)}</b></span>` : "") +
+        (cur.pm10 != null ? `<span>PM10 <b>${Math.round(cur.pm10)}</b></span>` : "") +
+        (cur.ozone != null ? `<span>Ozone <b>${Math.round(cur.ozone)}</b></span>` : "");
+    } else {
+      pol.innerHTML = "";
+    }
+  }
+
   /* ---------- FORECAST view ---------- */
+  // Build a plain-language "what this could mean for you" list from current and
+  // forecasted conditions. Each item: { level, icon, title, text, symptoms[] }.
+  function buildSymptomWatch() {
+    const box = $("#symptomWatch");
+    if (!weatherData) { box.innerHTML = '<p class="empty">Set your location to see guidance.</p>'; return; }
+
+    const cur = pressureNow();
+    const items = [];
+
+    // Pressure swings over the next 24h (the main vestibular trigger).
+    let maxDrop = 0, maxRise = 0;
+    for (const h of [3, 6, 9, 12, 18, 24]) {
+      const p = pressureAtOffset(h);
+      if (p == null) continue;
+      maxDrop = Math.min(maxDrop, p - cur);
+      maxRise = Math.max(maxRise, p - cur);
+    }
+    if (maxDrop <= -3) {
+      items.push({ level: "bad", icon: "📉", title: "Pressure dropping ahead",
+        text: `Up to ${PS.fmtPressureDelta(maxDrop, settings.pressureUnit)} ${settings.pressureUnit} over the next day. Falling pressure is the most common trigger.`,
+        symptoms: ["Dizziness", "Vertigo", "Migraine", "Ear pressure"] });
+    } else if (maxRise >= 4) {
+      items.push({ level: "warn", icon: "📈", title: "Pressure rising ahead",
+        text: `Up to +${PS.fmtPressureDelta(maxRise, settings.pressureUnit).replace("+","")} ${settings.pressureUnit} over the next day. Rapid changes either direction can be felt.`,
+        symptoms: ["Headache", "Sinus pressure", "Fatigue"] });
+    }
+
+    // Absolute low pressure.
+    if (cur < 1005) {
+      items.push({ level: "warn", icon: "🌧️", title: "Low pressure system",
+        text: "Pressure is on the low side, often with unsettled or stormy weather.",
+        symptoms: ["Joint aches", "Headache", "Low energy"] });
+    }
+
+    // Humidity (from current conditions).
+    const hum = weatherData.current.humidity;
+    if (hum >= 80) {
+      items.push({ level: "warn", icon: "💧", title: "High humidity",
+        text: `Humidity around ${Math.round(hum)}%. Muggy air can add to that heavy, off-balance feeling.`,
+        symptoms: ["Dizziness", "Fatigue", "Breathlessness"] });
+    } else if (hum <= 30) {
+      items.push({ level: "warn", icon: "🏜️", title: "Very dry air",
+        text: `Humidity around ${Math.round(hum)}%. Dry air can irritate sinuses and airways.`,
+        symptoms: ["Dry sinuses", "Headache"] });
+    }
+
+    // Temperature swing over the next 24h.
+    const temps = weatherData.series
+      .filter((p) => p.t.getTime() >= Date.now() && p.t.getTime() <= Date.now() + 24 * 3600000)
+      .map((p) => p.temp).filter((t) => t != null);
+    if (temps.length) {
+      const swing = Math.max(...temps) - Math.min(...temps);
+      if (swing >= 12) {
+        items.push({ level: "warn", icon: "🌡️", title: "Big temperature swing",
+          text: `About ${Math.round(swing)}°C between the day's high and low. Sharp temperature changes can set off symptoms.`,
+          symptoms: ["Headache", "Fatigue"] });
+      }
+    }
+
+    // Air quality.
+    const aqi = airData && airData.current ? airData.current.aqi : null;
+    if (aqi != null && aqi > 100) {
+      const cat = PS.aqiCategory(aqi);
+      items.push({ level: aqi > 150 ? "bad" : "warn", icon: "🌫️", title: `Air quality: ${cat.label} (AQI ${Math.round(aqi)})`,
+        text: cat.note, symptoms: ["Headache", "Fatigue", "Throat/eye irritation"] });
+    }
+
+    if (!items.length) {
+      box.innerHTML =
+        '<div class="watch-item good"><span class="watch-icon">🌤️</span><div class="watch-body">' +
+        '<div class="watch-title">Conditions look calm</div>' +
+        '<div class="watch-text">No major pressure swings, humidity, temperature, or air-quality triggers in the next day. A good window if you\'re sensitive.</div>' +
+        '</div></div>';
+      return;
+    }
+
+    box.innerHTML = items.map((it) => `
+      <div class="watch-item ${it.level}">
+        <span class="watch-icon" aria-hidden="true">${it.icon}</span>
+        <div class="watch-body">
+          <div class="watch-title">${it.title}</div>
+          <div class="watch-text">${it.text}</div>
+          <div class="watch-sym">Possible: <b>${it.symptoms.join(", ")}</b></div>
+        </div>
+      </div>`).join("");
+  }
+
   function renderForecast() {
+    buildSymptomWatch();
     if (!weatherData) return;
     const future = weatherData.series.filter(
       (p) => p.t.getTime() >= Date.now() - 3600000
@@ -183,28 +308,90 @@
     $("#severityOut").textContent = `${v} — ${severityWords[v]}`;
   });
 
-  $("#logForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const severity = +$("#severity").value;
-    const symptoms = $$("#symptomChips .chip.on").map((c) => c.textContent);
-    const note = $("#note").value.trim();
+  // A snapshot of the weather attached to each log entry, so the data is rich
+  // enough to find patterns later.
+  function currentSnapshot() {
+    const snap = { pressure: pressureNow() };
+    if (weatherData) {
+      snap.temp = weatherData.current.temp;
+      snap.humidity = weatherData.current.humidity;
+      snap.code = weatherData.current.code;
+      const p6 = pressureAtOffset(-6);
+      if (p6 != null && snap.pressure != null) snap.trend6h = snap.pressure - p6;
+    }
+    if (airData && airData.current) snap.aqi = airData.current.aqi;
+    return snap;
+  }
+
+  function saveEntry(severity, symptoms, note) {
     const entry = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       ts: new Date().toISOString(),
       severity,
       symptoms,
       note,
-      pressure: pressureNow()
+      ...currentSnapshot()
     };
     PS.store.addLog(entry);
-    e.target.reset();
+    renderLogList();
+  }
+
+  function resetLogForm() {
+    $("#logForm").reset();
     $("#severityOut").textContent = "0 — none";
     $$("#symptomChips .chip.on").forEach((c) => c.classList.remove("on"));
+  }
+
+  $("#logForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const severity = +$("#severity").value;
+    const symptoms = $$("#symptomChips .chip.on").map((c) => c.textContent);
+    saveEntry(severity, symptoms, $("#note").value.trim());
+    resetLogForm();
     toast("Entry saved");
-    renderLogList();
   });
 
+  // Quick "feeling good" — a one-tap zero-severity entry to capture good days.
+  $("#quickGoodBtn").addEventListener("click", () => {
+    saveEntry(0, [], "Feeling good");
+    resetLogForm();
+    toast("Logged a good moment ✓");
+  });
+
+  function renderSnapshot() {
+    const el = $("#logSnapshot");
+    if (!weatherData) { el.textContent = "Set your location to attach conditions."; return; }
+    const cur = pressureNow();
+    const p6 = pressureAtOffset(-6);
+    const trend = classifyTrend(cur - p6);
+    const aqi = airData && airData.current ? airData.current.aqi : null;
+    const parts = [
+      `<span class="snap">Pressure <b>${PS.fmtPressure(cur, settings.pressureUnit)} ${settings.pressureUnit}</b></span>`,
+      `<span class="snap">Trend <b>${trend.text}</b></span>`,
+      `<span class="snap">Temp <b>${PS.fmtTemp(weatherData.current.temp, settings.tempUnit)}</b></span>`,
+      `<span class="snap">Humidity <b>${Math.round(weatherData.current.humidity)}%</b></span>`
+    ];
+    if (aqi != null) parts.push(`<span class="snap">AQI <b>${Math.round(aqi)}</b></span>`);
+    el.innerHTML = parts.join("");
+  }
+
+  function renderLogStats() {
+    const logs = PS.store.getLogs();
+    const el = $("#logStats");
+    if (!el) return;
+    if (!logs.length) { el.innerHTML = ""; return; }
+    const avg = logs.reduce((s, l) => s + l.severity, 0) / logs.length;
+    const last7 = logs.filter((l) => Date.now() - new Date(l.ts).getTime() < 7 * 864e5).length;
+    const topSym = countSymptoms(logs);
+    el.innerHTML =
+      `<span class="stat-pill"><b>${logs.length}</b> entries</span>` +
+      `<span class="stat-pill"><b>${avg.toFixed(1)}</b> avg severity</span>` +
+      `<span class="stat-pill"><b>${last7}</b> in last 7 days</span>` +
+      (topSym ? `<span class="stat-pill"><b>${topSym}</b> top symptom</span>` : "");
+  }
+
   function renderLogList() {
+    renderLogStats();
     const logs = PS.store.getLogs();
     const list = $("#logList");
     list.innerHTML = "";
@@ -220,6 +407,11 @@
       });
       const press = l.pressure != null
         ? `${PS.fmtPressure(l.pressure, settings.pressureUnit)} ${settings.pressureUnit}` : "—";
+      // Build a compact conditions line from whatever the snapshot captured.
+      const cond = [];
+      if (l.temp != null) cond.push(PS.fmtTemp(l.temp, settings.tempUnit));
+      if (l.humidity != null) cond.push(`${Math.round(l.humidity)}% hum`);
+      if (l.aqi != null) cond.push(`AQI ${Math.round(l.aqi)}`);
       li.innerHTML = `
         <span class="sev-badge" style="background:${PS.charts.severityColor(l.severity)}">${l.severity}</span>
         <div class="log-meta">
@@ -227,6 +419,7 @@
           ${l.symptoms.length ? `<div class="log-sym">${l.symptoms.join(" · ")}</div>` : ""}
           ${l.note ? `<div class="log-note">${escapeHtml(l.note)}</div>` : ""}
           <div class="log-press">Pressure: ${press}</div>
+          ${cond.length ? `<div class="log-cond">${cond.join(" · ")}</div>` : ""}
         </div>
         <button class="del-btn" aria-label="Delete entry" data-id="${l.id}">✕</button>`;
       list.appendChild(li);
@@ -248,10 +441,14 @@
   $("#exportBtn").addEventListener("click", () => {
     const logs = PS.store.getLogs();
     if (!logs.length) { toast("Nothing to export yet"); return; }
-    const header = "timestamp,severity,symptoms,pressure_hpa,note\n";
+    const header = "timestamp,severity,symptoms,pressure_hpa,pressure_change_6h,temp_c,humidity_pct,us_aqi,note\n";
     const rows = logs.map((l) =>
       [l.ts, l.severity, `"${l.symptoms.join("; ")}"`,
        l.pressure != null ? l.pressure.toFixed(1) : "",
+       l.trend6h != null ? l.trend6h.toFixed(1) : "",
+       l.temp != null ? l.temp.toFixed(1) : "",
+       l.humidity != null ? Math.round(l.humidity) : "",
+       l.aqi != null ? Math.round(l.aqi) : "",
        `"${(l.note || "").replace(/"/g, '""')}"`].join(",")
     ).join("\n");
     const blob = new Blob([header + rows], { type: "text/csv" });
@@ -378,6 +575,7 @@
       PS.store.saveSettings(settings);
       syncSegButtons();
       renderNow();
+      renderSnapshot();
       renderLogList();
     })
   );
@@ -397,12 +595,24 @@
   async function loadWeather() {
     if (!settings.location) return;
     $("#trendText").textContent = "Loading…";
+    const { latitude, longitude } = settings.location;
+
+    // Air quality is a separate endpoint; fetch it alongside the weather and
+    // don't let an air-quality hiccup block the main forecast.
+    PS.weather.fetchAirQuality(latitude, longitude)
+      .then((aq) => {
+        airData = aq;
+        renderAirQuality();
+        renderSnapshot();
+        const open = $$(".view").find((v) => !v.hidden);
+        if (open && open.id === "view-forecast") buildSymptomWatch();
+      })
+      .catch(() => { airData = null; renderAirQuality(); });
+
     try {
-      weatherData = await PS.weather.fetchWeather(
-        settings.location.latitude,
-        settings.location.longitude
-      );
+      weatherData = await PS.weather.fetchWeather(latitude, longitude);
       renderNow();
+      renderSnapshot();
       // refresh whichever secondary view is open
       const open = $$(".view").find((v) => !v.hidden);
       if (open && open.id === "view-forecast") renderForecast();
