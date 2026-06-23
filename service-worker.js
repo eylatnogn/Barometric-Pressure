@@ -1,6 +1,6 @@
 /* Offline support: cache the app shell so it opens without a connection.
    Weather requests always go to the network (and fail gracefully offline). */
-const CACHE = "pressuresense-v1";
+const CACHE = "pressuresense-v2";
 const SHELL = [
   "./",
   "./index.html",
@@ -13,7 +13,8 @@ const SHELL = [
   "./manifest.webmanifest",
   "./icons/icon.svg",
   "./icons/icon-192.png",
-  "./icons/icon-512.png"
+  "./icons/icon-512.png",
+  "./docs/PressureSense-Guide.html"
 ];
 
 self.addEventListener("install", (e) => {
