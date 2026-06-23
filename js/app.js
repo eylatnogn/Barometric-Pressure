@@ -448,6 +448,14 @@
 
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("service-worker.js").catch(() => {});
+      // When a new service worker takes over (after an update), reload once so
+      // the user immediately gets the latest CSS/JS instead of stale cache.
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (refreshing) return;
+        refreshing = true;
+        location.reload();
+      });
     }
   }
 
