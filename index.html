@@ -113,33 +113,19 @@
       <div id="forecastList" class="forecast-list"></div>
     </section>
 
-    <!-- LOG -->
+    <!-- LOG (landing) -->
     <section id="view-log" class="view" aria-label="Symptom log" hidden>
-      <div class="card">
-        <h2 class="card-title">How are you feeling?</h2>
-        <p class="card-sub">This entry is stamped with the weather right now, so you can spot patterns later.</p>
-
+      <div class="card checkin-card">
+        <h2 class="card-title">Today's check-in</h2>
+        <p class="card-sub">A quick guided log — takes about 20 seconds. Here's what we'll ask:</p>
+        <ol class="preview-list">
+          <li><span class="pv-num">1</span> How are you feeling overall?</li>
+          <li><span class="pv-num">2</span> Which symptoms, if any?</li>
+          <li><span class="pv-num">3</span> Anything worth noting?</li>
+        </ol>
         <div id="logSnapshot" class="log-snapshot">Reading current conditions…</div>
-
-        <form id="logForm">
-          <label class="field-label" for="severity">
-            Symptom severity: <strong id="severityOut">0 — none</strong>
-          </label>
-          <input id="severity" name="severity" type="range" min="0" max="10" value="0" step="1" class="slider" />
-
-          <fieldset class="symptom-set">
-            <legend>Symptoms (tap any that apply)</legend>
-            <div id="symptomChips" class="chips"></div>
-          </fieldset>
-
-          <label class="field-label" for="note">Notes (optional)</label>
-          <textarea id="note" name="note" rows="2" placeholder="e.g. dizzy this morning, took medication"></textarea>
-
-          <div class="log-actions">
-            <button type="button" id="quickGoodBtn" class="ghost-btn">Feeling good ✓</button>
-            <button type="submit" class="primary-btn grow">Save entry</button>
-          </div>
-        </form>
+        <button id="startLogBtn" class="primary-btn full" type="button">Continue to fill out today's log →</button>
+        <button id="quickGoodBtn" class="ghost-btn full" type="button">Or just log: feeling good ✓</button>
       </div>
 
       <div class="card">
@@ -169,6 +155,47 @@
     <button class="tab" data-view="log" type="button"><span class="tab-icon" aria-hidden="true">📝</span>Log</button>
     <button class="tab" data-view="trends" type="button"><span class="tab-icon" aria-hidden="true">📊</span>Trends</button>
   </nav>
+
+  <!-- Log check-in wizard (full-screen, step by step) -->
+  <div id="logWizard" class="wizard" hidden aria-label="New log check-in" role="dialog" aria-modal="true">
+    <header class="wizard-head">
+      <button id="wizClose" class="wiz-x" type="button" aria-label="Close">✕</button>
+      <div class="wizard-progress"><span id="wizBar" class="wizard-bar"></span></div>
+      <span id="wizStepLabel" class="wiz-step-label">1 / 3</span>
+    </header>
+
+    <div class="wizard-body">
+      <!-- Step 1: severity -->
+      <section class="wiz-step" data-step="0">
+        <h2 class="wiz-q">How are you feeling overall?</h2>
+        <p class="wiz-hint">Pick the closest match.</p>
+        <div id="wizSeverity" class="sev-options" role="radiogroup" aria-label="Severity"></div>
+      </section>
+
+      <!-- Step 2: symptoms -->
+      <section class="wiz-step" data-step="1" hidden>
+        <h2 class="wiz-q">Which symptoms, if any?</h2>
+        <p class="wiz-hint">Tap all that apply — leave blank if none.</p>
+        <div id="wizSymptoms" class="checklist"></div>
+      </section>
+
+      <!-- Step 3: notes + review -->
+      <section class="wiz-step" data-step="2" hidden>
+        <h2 class="wiz-q">Anything worth noting?</h2>
+        <p class="wiz-hint">Optional — medication, sleep, triggers, etc.</p>
+        <textarea id="wizNote" rows="3" placeholder="e.g. dizzy after lunch, took medication at 2pm"></textarea>
+        <div class="wiz-review">
+          <div class="wiz-review-title">This will be saved with today's conditions:</div>
+          <div id="wizSnapshot" class="log-snapshot"></div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="wizard-foot">
+      <button id="wizBack" class="ghost-btn" type="button">Back</button>
+      <button id="wizNext" class="primary-btn grow" type="button">Next</button>
+    </footer>
+  </div>
 
   <!-- Location dialog -->
   <dialog id="locationDialog" class="dialog">

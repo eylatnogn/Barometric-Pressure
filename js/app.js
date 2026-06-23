@@ -287,26 +287,7 @@
     });
   }
 
-  /* ---------- LOG view ---------- */
-  function buildSymptomChips() {
-    const wrap = $("#symptomChips");
-    wrap.innerHTML = "";
-    PS.config.symptoms.forEach((s) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "chip";
-      b.textContent = s;
-      b.addEventListener("click", () => b.classList.toggle("on"));
-      wrap.appendChild(b);
-    });
-  }
-
-  const severityWords = ["none", "barely there", "mild", "mild", "moderate", "moderate",
-    "noticeable", "strong", "strong", "severe", "severe"];
-  $("#severity").addEventListener("input", (e) => {
-    const v = +e.target.value;
-    $("#severityOut").textContent = `${v} — ${severityWords[v]}`;
-  });
+  /* ---------- LOG: data + check-in wizard ---------- */
 
   // A snapshot of the weather attached to each log entry, so the data is rich
   // enough to find patterns later.
@@ -327,52 +308,131 @@
     const entry = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       ts: new Date().toISOString(),
-      severity,
-      symptoms,
-      note,
+      severity, symptoms, note,
       ...currentSnapshot()
     };
     PS.store.addLog(entry);
     renderLogList();
   }
 
-  function resetLogForm() {
-    $("#logForm").reset();
-    $("#severityOut").textContent = "0 — none";
-    $$("#symptomChips .chip.on").forEach((c) => c.classList.remove("on"));
+  // Five plain-language severity levels (single-select checklist in step 1).
+  const SEV_LEVELS = [
+    { v: 0, name: "Feeling good", range: "0" },
+    { v: 2, name: "Mild", range: "1–3" },
+    { v: 4, name: "Moderate", range: "4–6" },
+    { v: 7, name: "Strong", range: "7–8" },
+    { v: 9, name: "Severe", range: "9–10" }
+  ];
+
+  const wiz = { step: 0, severity: null, symptoms: new Set(), steps: 3 };
+
+  function buildSevOptions() {
+    const wrap = $("#wizSeverity");
+    wrap.innerHTML = "";
+    SEV_LEVELS.forEach((lvl) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "sev-opt";
+      b.setAttribute("role", "radio");
+      b.innerHTML =
+        `<span class="dot" style="background:${PS.charts.severityColor(lvl.v)}"></span>` +
+        `<span class="sev-name">${lvl.name}</span>` +
+        `<span class="sev-range">${lvl.range}</span>`;
+      b.addEventListener("click", () => {
+        wiz.severity = lvl.v;
+        $$("#wizSeverity .sev-opt").forEach((o) => o.classList.toggle("on", o === b));
+        b.setAttribute("aria-checked", "true");
+      });
+      wrap.appendChild(b);
+    });
   }
 
-  $("#logForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const severity = +$("#severity").value;
-    const symptoms = $$("#symptomChips .chip.on").map((c) => c.textContent);
-    saveEntry(severity, symptoms, $("#note").value.trim());
-    resetLogForm();
-    toast("Entry saved");
-  });
+  function buildWizSymptoms() {
+    const wrap = $("#wizSymptoms");
+    wrap.innerHTML = "";
+    PS.config.symptoms.forEach((s) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "check-item";
+      b.innerHTML = `<span class="box" aria-hidden="true">✓</span><span>${s}</span>`;
+      b.addEventListener("click", () => {
+        if (wiz.symptoms.has(s)) wiz.symptoms.delete(s); else wiz.symptoms.add(s);
+        b.classList.toggle("on", wiz.symptoms.has(s));
+      });
+      wrap.appendChild(b);
+    });
+  }
 
-  // Quick "feeling good" — a one-tap zero-severity entry to capture good days.
+  function openWizard() {
+    wiz.step = 0; wiz.severity = null; wiz.symptoms.clear();
+    $("#wizNote").value = "";
+    $$("#wizSeverity .sev-opt").forEach((o) => { o.classList.remove("on"); o.setAttribute("aria-checked", "false"); });
+    $$("#wizSymptoms .check-item").forEach((o) => o.classList.remove("on"));
+    renderSnapshot();
+    $("#logWizard").hidden = false;
+    document.body.style.overflow = "hidden";
+    wizGoto(0);
+  }
+
+  function closeWizard() {
+    $("#logWizard").hidden = true;
+    document.body.style.overflow = "";
+  }
+
+  function wizGoto(n) {
+    wiz.step = Math.max(0, Math.min(wiz.steps - 1, n));
+    $$(".wiz-step").forEach((s) => (s.hidden = +s.dataset.step !== wiz.step));
+    $("#wizBar").style.width = `${((wiz.step + 1) / wiz.steps) * 100}%`;
+    $("#wizStepLabel").textContent = `${wiz.step + 1} / ${wiz.steps}`;
+    $("#wizBack").style.visibility = wiz.step === 0 ? "hidden" : "visible";
+    $("#wizNext").textContent = wiz.step === wiz.steps - 1 ? "Save entry" : "Next";
+    $(".wizard-body").scrollTop = 0;
+  }
+
+  function wizNext() {
+    if (wiz.step === 0 && wiz.severity == null) { toast("Pick how you're feeling"); return; }
+    if (wiz.step === wiz.steps - 1) {
+      const sev = wiz.severity, syms = [...wiz.symptoms];
+      saveEntry(sev, syms, $("#wizNote").value.trim());
+      closeWizard();
+      renderSnapshot();
+      toast(sev === 0 && syms.length === 0 ? "Logged a good moment ✓" : "Entry saved");
+      return;
+    }
+    wizGoto(wiz.step + 1);
+  }
+
+  $("#startLogBtn").addEventListener("click", openWizard);
+  $("#wizClose").addEventListener("click", closeWizard);
+  $("#wizBack").addEventListener("click", () => wizGoto(wiz.step - 1));
+  $("#wizNext").addEventListener("click", wizNext);
+
+  // Quick "feeling good" — one-tap zero-severity entry from the landing page.
   $("#quickGoodBtn").addEventListener("click", () => {
     saveEntry(0, [], "Feeling good");
-    resetLogForm();
     toast("Logged a good moment ✓");
   });
 
   function renderSnapshot() {
-    const el = $("#logSnapshot");
-    if (!weatherData) { el.textContent = "Set your location to attach conditions."; return; }
-    const cur = pressureNow();
-    const p6 = pressureAtOffset(-6);
-    const trend = classifyTrend(cur - p6);
-    const aqi = airData && airData.current ? airData.current.aqi : null;
-    const parts = [
-      `<span class="snap">Pressure <b>${PS.fmtPressure(cur, settings.pressureUnit)} ${settings.pressureUnit}</b></span>`,
-      `<span class="snap">Trend <b>${trend.text}</b></span>`,
-      `<span class="snap">Temp <b>${PS.fmtTemp(weatherData.current.temp, settings.tempUnit)}</b></span>`,
-      `<span class="snap">Humidity <b>${Math.round(weatherData.current.humidity)}%</b></span>`
-    ];
-    if (aqi != null) parts.push(`<span class="snap">AQI <b>${Math.round(aqi)}</b></span>`);
-    el.innerHTML = parts.join("");
+    const targets = ["#logSnapshot", "#wizSnapshot"].map($).filter(Boolean);
+    if (!targets.length) return;
+    let html;
+    if (!weatherData) {
+      html = '<span class="snap">Set your location to attach conditions.</span>';
+    } else {
+      const cur = pressureNow();
+      const trend = classifyTrend(cur - pressureAtOffset(-6));
+      const aqi = airData && airData.current ? airData.current.aqi : null;
+      const parts = [
+        `<span class="snap">Pressure <b>${PS.fmtPressure(cur, settings.pressureUnit)} ${settings.pressureUnit}</b></span>`,
+        `<span class="snap">Trend <b>${trend.text}</b></span>`,
+        `<span class="snap">Temp <b>${PS.fmtTemp(weatherData.current.temp, settings.tempUnit)}</b></span>`,
+        `<span class="snap">Humidity <b>${Math.round(weatherData.current.humidity)}%</b></span>`
+      ];
+      if (aqi != null) parts.push(`<span class="snap">AQI <b>${Math.round(aqi)}</b></span>`);
+      html = parts.join("");
+    }
+    targets.forEach((t) => (t.innerHTML = html));
   }
 
   function renderLogStats() {
@@ -459,7 +519,7 @@
     URL.revokeObjectURL(a.href);
   });
 
-  $("#logNowBtn").addEventListener("click", () => showView("log"));
+  $("#logNowBtn").addEventListener("click", () => { showView("log"); openWizard(); });
 
   /* ---------- TRENDS view ---------- */
   function renderTrends() {
@@ -625,7 +685,8 @@
 
   /* ---------- init ---------- */
   function init() {
-    buildSymptomChips();
+    buildSevOptions();
+    buildWizSymptoms();
     renderLogList();
     syncSegButtons();
 
