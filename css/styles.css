@@ -142,8 +142,16 @@ main { padding: 16px; }
 .alert-banner.bad { background: color-mix(in srgb, var(--bad) 16%, var(--card)); border-color: var(--bad); }
 .alert-banner.calm { background: color-mix(in srgb, var(--good) 14%, var(--card)); border-color: var(--good); }
 
-/* Charts */
-.chart { width: 100%; display: block; touch-action: pan-y; }
+/* Charts — locked to a square frame, centered, capped on wide screens */
+.chart {
+  display: block;
+  width: 100%;
+  max-width: 360px;
+  aspect-ratio: 1 / 1;   /* height tracks width, so the frame is always square */
+  height: auto;
+  margin: 4px auto 0;
+  touch-action: pan-y;
+}
 
 /* Forecast list */
 .forecast-list { display: flex; flex-direction: column; gap: 8px; }
