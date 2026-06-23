@@ -8,13 +8,17 @@ PS.charts = (() => {
 
   function setup(canvas) {
     const dpr = window.devicePixelRatio || 1;
+    // Drive the backing store from the element's CSS-laid-out size (a square,
+    // via `aspect-ratio: 1/1`). Reading the rendered size — not canvas.height —
+    // is what keeps redraws from compounding the dimensions on every call.
     const rect = canvas.getBoundingClientRect();
-    const w = rect.width || canvas.parentElement.clientWidth;
-    const h = canvas.height;
+    const w = Math.max(1, Math.round(rect.width || canvas.parentElement.clientWidth));
+    const h = Math.max(1, Math.round(rect.height || w));
     canvas.width = w * dpr;
     canvas.height = h * dpr;
     const ctx = canvas.getContext("2d");
-    ctx.scale(dpr, dpr);
+    // setTransform (not scale) resets the matrix each time, so DPR never stacks.
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     return { ctx, w, h };
   }
 

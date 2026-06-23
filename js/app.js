@@ -36,6 +36,8 @@
     $$(".view").forEach((v) => (v.hidden = v.id !== `view-${name}`));
     $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === name));
     $("#main").focus({ preventScroll: true });
+    // Re-render the view being shown so its (now-visible) square canvas sizes correctly.
+    if (name === "now") renderNow();
     if (name === "forecast") renderForecast();
     if (name === "trends") renderTrends();
     if (name === "log") renderLogList();
@@ -434,10 +436,13 @@
     window.addEventListener("resize", () => {
       clearTimeout(rt);
       rt = setTimeout(() => {
-        renderNow();
+        // Only redraw the visible view — a hidden canvas measures 0 and would
+        // otherwise render at the wrong size.
         const open = $$(".view").find((v) => !v.hidden);
-        if (open && open.id === "view-forecast") renderForecast();
-        if (open && open.id === "view-trends") renderTrends();
+        if (!open) return;
+        if (open.id === "view-now") renderNow();
+        if (open.id === "view-forecast") renderForecast();
+        if (open.id === "view-trends") renderTrends();
       }, 200);
     });
 
