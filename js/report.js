@@ -225,6 +225,7 @@ PS.report = (() => {
     logs.forEach((l) => {
       pdf.ensure(54);
       pdf.paragraph([...RB(fmtDate(l.ts)), ...R(`    Severity ${l.severity} (${sevLabel(l.severity)})`)], { size: 11, leading: 15, gap: 2 });
+      if (l.location && l.location.name) pdf.paragraph([...RB("Location: "), ...R(l.location.name)], { gap: 2 });
       if ((l.symptoms || []).length) pdf.paragraph([...RB("Symptoms: "), ...R(l.symptoms.join(", "))], { gap: 2 });
       const cond = [];
       if (l.pressure != null) cond.push(`Pressure ${PS.fmtPressure(l.pressure, pUnit)} ${pUnit}${l.trend6h != null ? ` (${PS.fmtPressureDelta(l.trend6h, pUnit)} /6h)` : ""}`);

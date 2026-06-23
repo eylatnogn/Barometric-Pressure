@@ -181,10 +181,22 @@
         <div id="wizSymptoms" class="checklist"></div>
       </section>
 
-      <!-- Step 3: when + notes + review -->
+      <!-- Step 3: when + where + notes + review -->
       <section class="wiz-step" data-step="2" hidden>
-        <h2 class="wiz-q">When was this?</h2>
-        <p class="wiz-hint">Defaults to now — change it to log an earlier day.</p>
+        <h2 class="wiz-q">When and where?</h2>
+        <p class="wiz-hint">Defaults to now and your saved location — change either to log an earlier day or a different place.</p>
+
+        <label class="field-label">Location</label>
+        <button id="wizLocBtn" class="wiz-loc" type="button">
+          <span id="wizLocName">—</span><span class="wiz-loc-edit">Change ▾</span>
+        </button>
+        <div id="wizLocSearch" class="wiz-loc-search" hidden>
+          <input id="wizCitySearch" type="search" placeholder="Search a city…" autocomplete="off" />
+          <ul id="wizCityResults" class="city-results"></ul>
+          <button id="wizUseSaved" class="text-btn" type="button">Use my saved location</button>
+        </div>
+
+        <label class="field-label" for="wizWhen">Date &amp; time</label>
         <input id="wizWhen" type="datetime-local" class="wiz-when" />
 
         <label class="field-label" for="wizNote">Anything worth noting? <span class="muted">(optional)</span></label>

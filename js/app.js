@@ -304,13 +304,14 @@
     return snap;
   }
 
-  function saveEntry(severity, symptoms, note, when, snapshot) {
+  function saveEntry(severity, symptoms, note, when, snapshot, location) {
     const entry = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       ts: (when || new Date()).toISOString(),
       severity, symptoms, note,
       ...(snapshot || currentSnapshot())
     };
+    if (location) entry.location = { name: location.name, latitude: location.latitude, longitude: location.longitude };
     PS.store.addLog(entry);
     renderLogList();
   }
@@ -331,7 +332,7 @@
   ];
 
   const wiz = { step: 0, severity: null, symptoms: new Set(), steps: 3,
-    when: new Date(), snapshot: null, loading: false };
+    when: new Date(), location: null, snapshot: null, loading: false };
 
   function buildSevOptions() {
     const wrap = $("#wizSeverity");
@@ -373,9 +374,13 @@
   function openWizard() {
     wiz.step = 0; wiz.severity = null; wiz.symptoms.clear();
     wiz.when = new Date(); wiz.snapshot = currentSnapshot(); wiz.loading = false;
+    wiz.location = settings.location ? { ...settings.location } : null;
     $("#wizNote").value = "";
     $$("#wizSeverity .sev-opt").forEach((o) => { o.classList.remove("on"); o.setAttribute("aria-checked", "false"); });
     $$("#wizSymptoms .check-item").forEach((o) => o.classList.remove("on"));
+    $("#wizLocName").textContent = wiz.location ? wiz.location.name : "No location set";
+    $("#wizLocSearch").hidden = true;
+    $("#wizCitySearch").value = ""; $("#wizCityResults").innerHTML = "";
     const now = new Date();
     const win = $("#wizWhen");
     win.max = toLocalInput(now);
@@ -387,32 +392,42 @@
     wizGoto(0);
   }
 
-  // When the user changes the date/time, load the conditions for that moment.
-  async function onWizWhenChange() {
+  // Load the conditions for the chosen time AND place.
+  async function updateWizConditions() {
+    const loc = wiz.location, when = wiz.when, now = Date.now();
+    const isNow = now - when.getTime() < 3600 * 1000;
+    const sameLoc = settings.location && loc &&
+      loc.latitude === settings.location.latitude && loc.longitude === settings.location.longitude;
+    // "Now" at the saved location → reuse the already-loaded live data.
+    if (isNow && sameLoc && weatherData) { wiz.snapshot = currentSnapshot(); renderWizSnapshot(); return; }
+    if (!loc) { wiz.snapshot = {}; renderWizSnapshot(); return; }
+    wiz.loading = true; renderWizSnapshot();
+    try {
+      wiz.snapshot = await PS.weather.fetchHistoricalSnapshot(loc.latitude, loc.longitude, when) || {};
+    } catch {
+      wiz.snapshot = {};
+      toast("Couldn't load conditions for that time/place");
+    }
+    wiz.loading = false;
+    renderWizSnapshot();
+  }
+
+  function onWizWhenChange() {
     const val = $("#wizWhen").value;
     if (!val) return;
     let when = new Date(val);
     const now = new Date();
     if (when > now) { when = now; $("#wizWhen").value = toLocalInput(now); }
     wiz.when = when;
+    updateWizConditions();
+  }
 
-    // Within the last hour → "now": use the already-loaded live conditions.
-    if (now.getTime() - when.getTime() < 3600 * 1000) {
-      wiz.snapshot = currentSnapshot();
-      renderWizSnapshot();
-      return;
-    }
-    if (!settings.location) { wiz.snapshot = {}; renderWizSnapshot(); return; }
-    wiz.loading = true; renderWizSnapshot();
-    try {
-      wiz.snapshot = await PS.weather.fetchHistoricalSnapshot(
-        settings.location.latitude, settings.location.longitude, when) || {};
-    } catch {
-      wiz.snapshot = {};
-      toast("Couldn't load conditions for that time");
-    }
-    wiz.loading = false;
-    renderWizSnapshot();
+  function setWizLocation(loc) {
+    wiz.location = loc ? { name: loc.name, latitude: loc.latitude, longitude: loc.longitude } : null;
+    $("#wizLocName").textContent = wiz.location ? wiz.location.name : "No location set";
+    $("#wizLocSearch").hidden = true;
+    $("#wizCitySearch").value = ""; $("#wizCityResults").innerHTML = "";
+    updateWizConditions();
   }
 
   function closeWizard() {
@@ -434,7 +449,7 @@
     if (wiz.step === 0 && wiz.severity == null) { toast("Pick how you're feeling"); return; }
     if (wiz.step === wiz.steps - 1) {
       const sev = wiz.severity, syms = [...wiz.symptoms];
-      saveEntry(sev, syms, $("#wizNote").value.trim(), wiz.when, wiz.snapshot);
+      saveEntry(sev, syms, $("#wizNote").value.trim(), wiz.when, wiz.snapshot, wiz.location);
       closeWizard();
       renderSnapshot();
       const backdated = Date.now() - wiz.when.getTime() > 3600 * 1000;
@@ -450,9 +465,35 @@
   $("#wizNext").addEventListener("click", wizNext);
   $("#wizWhen").addEventListener("change", onWizWhenChange);
 
-  // Quick "feeling good" — one-tap zero-severity entry (for right now).
+  // Location override inside the wizard (for back-dated incidents elsewhere).
+  $("#wizLocBtn").addEventListener("click", () => {
+    const s = $("#wizLocSearch");
+    s.hidden = !s.hidden;
+    if (!s.hidden) $("#wizCitySearch").focus();
+  });
+  $("#wizUseSaved").addEventListener("click", () => setWizLocation(settings.location));
+  let wizSearchTimer;
+  $("#wizCitySearch").addEventListener("input", (e) => {
+    clearTimeout(wizSearchTimer);
+    const q = e.target.value.trim();
+    if (q.length < 2) { $("#wizCityResults").innerHTML = ""; return; }
+    wizSearchTimer = setTimeout(async () => {
+      try {
+        const results = await PS.weather.geocode(q);
+        const ul = $("#wizCityResults"); ul.innerHTML = "";
+        results.forEach((r) => {
+          const li = document.createElement("li");
+          li.textContent = r.name;
+          li.addEventListener("click", () => setWizLocation(r));
+          ul.appendChild(li);
+        });
+      } catch { toast("Search failed — check connection"); }
+    }, 350);
+  });
+
+  // Quick "feeling good" — one-tap zero-severity entry (for right now, saved location).
   $("#quickGoodBtn").addEventListener("click", () => {
-    saveEntry(0, [], "Feeling good", new Date(), currentSnapshot());
+    saveEntry(0, [], "Feeling good", new Date(), currentSnapshot(), settings.location);
     toast("Logged a good moment ✓");
   });
 
@@ -533,6 +574,7 @@
           ${l.note ? `<div class="log-note">${escapeHtml(l.note)}</div>` : ""}
           <div class="log-press">Pressure: ${press}</div>
           ${cond.length ? `<div class="log-cond">${cond.join(" · ")}</div>` : ""}
+          ${l.location && l.location.name ? `<div class="log-cond">📍 ${escapeHtml(l.location.name)}</div>` : ""}
         </div>
         <button class="del-btn" aria-label="Delete entry" data-id="${l.id}">✕</button>`;
       list.appendChild(li);
