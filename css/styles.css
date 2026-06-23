@@ -391,6 +391,12 @@ textarea, input[type="search"] {
 .check-item.on { border-color: var(--accent); background: var(--accent-soft); }
 .check-item.on .box { background: var(--accent); border-color: var(--accent); }
 
+.wiz-when {
+  width: 100%; background: var(--card-2); color: var(--text);
+  border: 1.5px solid var(--line); border-radius: 12px; padding: 12px 14px;
+  font-size: 16px; font-family: inherit; margin-bottom: 18px;
+}
+.wiz-step .field-label { margin-top: 4px; }
 .wiz-review { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); }
 .wiz-review-title { font-size: 14px; color: var(--text-dim); margin-bottom: 10px; }
 

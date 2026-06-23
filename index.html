@@ -179,13 +179,17 @@
         <div id="wizSymptoms" class="checklist"></div>
       </section>
 
-      <!-- Step 3: notes + review -->
+      <!-- Step 3: when + notes + review -->
       <section class="wiz-step" data-step="2" hidden>
-        <h2 class="wiz-q">Anything worth noting?</h2>
-        <p class="wiz-hint">Optional — medication, sleep, triggers, etc.</p>
+        <h2 class="wiz-q">When was this?</h2>
+        <p class="wiz-hint">Defaults to now — change it to log an earlier day.</p>
+        <input id="wizWhen" type="datetime-local" class="wiz-when" />
+
+        <label class="field-label" for="wizNote">Anything worth noting? <span class="muted">(optional)</span></label>
         <textarea id="wizNote" rows="3" placeholder="e.g. dizzy after lunch, took medication at 2pm"></textarea>
+
         <div class="wiz-review">
-          <div class="wiz-review-title">This will be saved with today's conditions:</div>
+          <div class="wiz-review-title">Conditions that will be saved with this entry:</div>
           <div id="wizSnapshot" class="log-snapshot"></div>
         </div>
       </section>

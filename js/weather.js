@@ -92,5 +92,63 @@ PS.weather = (() => {
     };
   }
 
-  return { geocode, reverseName, fetchWeather, fetchAirQuality };
+  // Conditions for a chosen past moment, so a back-dated log carries the real
+  // weather from that time (not today's). Open-Meteo's forecast endpoint serves
+  // recent history (up to ~92 days) via start_date/end_date.
+  function ymd(d) {
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  }
+  function nearestIndex(times, targetMs) {
+    let idx = 0, best = Infinity;
+    times.forEach((t, i) => { const d = Math.abs(t.getTime() - targetMs); if (d < best) { best = d; idx = i; } });
+    return idx;
+  }
+
+  async function fetchHistoricalSnapshot(lat, lon, when) {
+    const dayBefore = new Date(when); dayBefore.setDate(dayBefore.getDate() - 1);
+    const target = when.getTime();
+
+    const wp = new URLSearchParams({
+      latitude: lat, longitude: lon,
+      hourly: "pressure_msl,temperature_2m,relative_humidity_2m,weather_code",
+      start_date: ymd(dayBefore), end_date: ymd(when), timezone: "auto"
+    });
+    const wres = await fetch(`${PS.config.weatherBase}?${wp}`);
+    if (!wres.ok) throw new Error("Historical weather request failed");
+    const wd = await wres.json();
+    const times = wd.hourly.time.map((t) => new Date(t));
+    if (!times.length) return null;
+    const i = nearestIndex(times, target);
+    const snap = {
+      pressure: wd.hourly.pressure_msl[i],
+      temp: wd.hourly.temperature_2m[i],
+      humidity: wd.hourly.relative_humidity_2m[i],
+      code: wd.hourly.weather_code[i]
+    };
+    const j = nearestIndex(times, target - 6 * 3600 * 1000);
+    if (snap.pressure != null && wd.hourly.pressure_msl[j] != null) {
+      snap.trend6h = snap.pressure - wd.hourly.pressure_msl[j];
+    }
+
+    // Air quality for that hour — best effort; never block the weather snapshot.
+    try {
+      const ap = new URLSearchParams({
+        latitude: lat, longitude: lon, hourly: "us_aqi",
+        start_date: ymd(when), end_date: ymd(when), timezone: "auto"
+      });
+      const ares = await fetch(`${PS.config.airQualityBase}?${ap}`);
+      if (ares.ok) {
+        const ad = await ares.json();
+        const at = (ad.hourly?.time || []).map((t) => new Date(t));
+        if (at.length) {
+          const k = nearestIndex(at, target);
+          if (ad.hourly.us_aqi[k] != null) snap.aqi = ad.hourly.us_aqi[k];
+        }
+      }
+    } catch {}
+    return snap;
+  }
+
+  return { geocode, reverseName, fetchWeather, fetchAirQuality, fetchHistoricalSnapshot };
 })();
