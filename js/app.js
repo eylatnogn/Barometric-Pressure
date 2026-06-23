@@ -304,15 +304,21 @@
     return snap;
   }
 
-  function saveEntry(severity, symptoms, note) {
+  function saveEntry(severity, symptoms, note, when, snapshot) {
     const entry = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-      ts: new Date().toISOString(),
+      ts: (when || new Date()).toISOString(),
       severity, symptoms, note,
-      ...currentSnapshot()
+      ...(snapshot || currentSnapshot())
     };
     PS.store.addLog(entry);
     renderLogList();
+  }
+
+  // <input type="datetime-local"> value formatting (local time, no timezone).
+  function toLocalInput(d) {
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
   }
 
   // Five plain-language severity levels (single-select checklist in step 1).
@@ -324,7 +330,8 @@
     { v: 9, name: "Severe", range: "9–10" }
   ];
 
-  const wiz = { step: 0, severity: null, symptoms: new Set(), steps: 3 };
+  const wiz = { step: 0, severity: null, symptoms: new Set(), steps: 3,
+    when: new Date(), snapshot: null, loading: false };
 
   function buildSevOptions() {
     const wrap = $("#wizSeverity");
@@ -365,13 +372,47 @@
 
   function openWizard() {
     wiz.step = 0; wiz.severity = null; wiz.symptoms.clear();
+    wiz.when = new Date(); wiz.snapshot = currentSnapshot(); wiz.loading = false;
     $("#wizNote").value = "";
     $$("#wizSeverity .sev-opt").forEach((o) => { o.classList.remove("on"); o.setAttribute("aria-checked", "false"); });
     $$("#wizSymptoms .check-item").forEach((o) => o.classList.remove("on"));
-    renderSnapshot();
+    const now = new Date();
+    const win = $("#wizWhen");
+    win.max = toLocalInput(now);
+    win.min = toLocalInput(new Date(now.getTime() - 91 * 864e5)); // Open-Meteo history limit
+    win.value = toLocalInput(now);
+    renderWizSnapshot();
     $("#logWizard").hidden = false;
     document.body.style.overflow = "hidden";
     wizGoto(0);
+  }
+
+  // When the user changes the date/time, load the conditions for that moment.
+  async function onWizWhenChange() {
+    const val = $("#wizWhen").value;
+    if (!val) return;
+    let when = new Date(val);
+    const now = new Date();
+    if (when > now) { when = now; $("#wizWhen").value = toLocalInput(now); }
+    wiz.when = when;
+
+    // Within the last hour → "now": use the already-loaded live conditions.
+    if (now.getTime() - when.getTime() < 3600 * 1000) {
+      wiz.snapshot = currentSnapshot();
+      renderWizSnapshot();
+      return;
+    }
+    if (!settings.location) { wiz.snapshot = {}; renderWizSnapshot(); return; }
+    wiz.loading = true; renderWizSnapshot();
+    try {
+      wiz.snapshot = await PS.weather.fetchHistoricalSnapshot(
+        settings.location.latitude, settings.location.longitude, when) || {};
+    } catch {
+      wiz.snapshot = {};
+      toast("Couldn't load conditions for that time");
+    }
+    wiz.loading = false;
+    renderWizSnapshot();
   }
 
   function closeWizard() {
@@ -393,10 +434,11 @@
     if (wiz.step === 0 && wiz.severity == null) { toast("Pick how you're feeling"); return; }
     if (wiz.step === wiz.steps - 1) {
       const sev = wiz.severity, syms = [...wiz.symptoms];
-      saveEntry(sev, syms, $("#wizNote").value.trim());
+      saveEntry(sev, syms, $("#wizNote").value.trim(), wiz.when, wiz.snapshot);
       closeWizard();
       renderSnapshot();
-      toast(sev === 0 && syms.length === 0 ? "Logged a good moment ✓" : "Entry saved");
+      const backdated = Date.now() - wiz.when.getTime() > 3600 * 1000;
+      toast(backdated ? "Back-dated entry saved" : (sev === 0 && syms.length === 0 ? "Logged a good moment ✓" : "Entry saved"));
       return;
     }
     wizGoto(wiz.step + 1);
@@ -406,33 +448,44 @@
   $("#wizClose").addEventListener("click", closeWizard);
   $("#wizBack").addEventListener("click", () => wizGoto(wiz.step - 1));
   $("#wizNext").addEventListener("click", wizNext);
+  $("#wizWhen").addEventListener("change", onWizWhenChange);
 
-  // Quick "feeling good" — one-tap zero-severity entry from the landing page.
+  // Quick "feeling good" — one-tap zero-severity entry (for right now).
   $("#quickGoodBtn").addEventListener("click", () => {
-    saveEntry(0, [], "Feeling good");
+    saveEntry(0, [], "Feeling good", new Date(), currentSnapshot());
     toast("Logged a good moment ✓");
   });
 
-  function renderSnapshot() {
-    const targets = ["#logSnapshot", "#wizSnapshot"].map($).filter(Boolean);
-    if (!targets.length) return;
-    let html;
-    if (!weatherData) {
-      html = '<span class="snap">Set your location to attach conditions.</span>';
-    } else {
-      const cur = pressureNow();
-      const trend = classifyTrend(cur - pressureAtOffset(-6));
-      const aqi = airData && airData.current ? airData.current.aqi : null;
-      const parts = [
-        `<span class="snap">Pressure <b>${PS.fmtPressure(cur, settings.pressureUnit)} ${settings.pressureUnit}</b></span>`,
-        `<span class="snap">Trend <b>${trend.text}</b></span>`,
-        `<span class="snap">Temp <b>${PS.fmtTemp(weatherData.current.temp, settings.tempUnit)}</b></span>`,
-        `<span class="snap">Humidity <b>${Math.round(weatherData.current.humidity)}%</b></span>`
-      ];
-      if (aqi != null) parts.push(`<span class="snap">AQI <b>${Math.round(aqi)}</b></span>`);
-      html = parts.join("");
+  // Build the conditions "chips" from any snapshot object (works for live or
+  // historical data — both share the same shape).
+  function snapshotHTML(snap) {
+    if (!snap || snap.pressure == null) {
+      return '<span class="snap">No recorded conditions for this time.</span>';
     }
-    targets.forEach((t) => (t.innerHTML = html));
+    const parts = [`<span class="snap">Pressure <b>${PS.fmtPressure(snap.pressure, settings.pressureUnit)} ${settings.pressureUnit}</b></span>`];
+    if (snap.trend6h != null) parts.push(`<span class="snap">Trend <b>${classifyTrend(snap.trend6h).text}</b></span>`);
+    if (snap.temp != null) parts.push(`<span class="snap">Temp <b>${PS.fmtTemp(snap.temp, settings.tempUnit)}</b></span>`);
+    if (snap.humidity != null) parts.push(`<span class="snap">Humidity <b>${Math.round(snap.humidity)}%</b></span>`);
+    if (snap.aqi != null) parts.push(`<span class="snap">AQI <b>${Math.round(snap.aqi)}</b></span>`);
+    return parts.join("");
+  }
+
+  // Landing-page snapshot = live "right now" conditions.
+  function renderSnapshot() {
+    const el = $("#logSnapshot");
+    if (!el) return;
+    el.innerHTML = weatherData
+      ? snapshotHTML(currentSnapshot())
+      : '<span class="snap">Set your location to attach conditions.</span>';
+  }
+
+  // Wizard snapshot = conditions for the chosen date/time (may be historical).
+  function renderWizSnapshot() {
+    const el = $("#wizSnapshot");
+    if (!el) return;
+    if (wiz.loading) { el.innerHTML = '<span class="snap">Loading conditions for that time…</span>'; return; }
+    if (!settings.location) { el.innerHTML = '<span class="snap">Set your location to attach conditions.</span>'; return; }
+    el.innerHTML = snapshotHTML(wiz.snapshot);
   }
 
   function renderLogStats() {
@@ -636,6 +689,7 @@
       syncSegButtons();
       renderNow();
       renderSnapshot();
+      renderWizSnapshot();
       renderLogList();
     })
   );
