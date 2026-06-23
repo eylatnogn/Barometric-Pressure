@@ -153,14 +153,26 @@ main { padding: 16px; }
 .alert-banner.bad { background: color-mix(in srgb, var(--bad) 16%, var(--card)); border-color: var(--bad); }
 .alert-banner.calm { background: color-mix(in srgb, var(--good) 14%, var(--card)); border-color: var(--good); }
 
-/* Charts — locked to a square frame, centered, capped on wide screens */
-.chart {
-  display: block;
+/* Charts — locked to a square frame via the padding-box trick (works on every
+   browser, unlike aspect-ratio on <canvas>). The box's height comes only from
+   its own width, and the canvas fills it absolutely — so the canvas's internal
+   pixel size can never push the layout taller. */
+.chart-box {
+  position: relative;
   width: 100%;
   max-width: 360px;
-  aspect-ratio: 1 / 1;   /* height tracks width, so the frame is always square */
-  height: auto;
   margin: 4px auto 0;
+}
+.chart-box::before {
+  content: "";
+  display: block;
+  padding-top: 100%;     /* square: height = width */
+}
+.chart {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   touch-action: pan-y;
 }
 

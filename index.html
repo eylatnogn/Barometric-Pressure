@@ -80,7 +80,7 @@
 
       <div class="card">
         <h2 class="card-title">Pressure · last 24 hours</h2>
-        <canvas id="chartNow" class="chart" aria-label="Chart of barometric pressure over the last 24 hours"></canvas>
+        <div class="chart-box"><canvas id="chartNow" class="chart" aria-label="Chart of barometric pressure over the last 24 hours"></canvas></div>
       </div>
 
       <button id="logNowBtn" class="primary-btn full" type="button">+ Log how I feel right now</button>
@@ -91,7 +91,7 @@
       <div class="card">
         <h2 class="card-title">Next 48 hours</h2>
         <p class="card-sub">Watch for steep climbs or drops — rapid changes are the usual trigger.</p>
-        <canvas id="chartForecast" class="chart" aria-label="Chart of forecast barometric pressure"></canvas>
+        <div class="chart-box"><canvas id="chartForecast" class="chart" aria-label="Chart of forecast barometric pressure"></canvas></div>
       </div>
       <div id="forecastList" class="forecast-list"></div>
     </section>
@@ -132,7 +132,7 @@
       <div class="card">
         <h2 class="card-title">Symptoms vs. pressure</h2>
         <p class="card-sub">Your logged severity (dots) over recent pressure (line). Patterns emerge over a few weeks.</p>
-        <canvas id="chartTrends" class="chart" aria-label="Chart comparing symptom severity to barometric pressure"></canvas>
+        <div class="chart-box"><canvas id="chartTrends" class="chart" aria-label="Chart comparing symptom severity to barometric pressure"></canvas></div>
       </div>
       <div id="insightCard" class="card insight"></div>
     </section>
