@@ -332,7 +332,18 @@
   ];
 
   const wiz = { step: 0, severity: null, symptoms: new Set(), steps: 3,
-    when: new Date(), location: null, snapshot: null, loading: false };
+    when: new Date(), location: null, snapshot: null, loading: false, editId: null };
+
+  // Normalize the weather fields of an entry/snapshot into a consistent shape,
+  // so editing always overwrites cleanly (no stale keys left behind).
+  function entryConditions(s) {
+    s = s || {};
+    return {
+      pressure: s.pressure ?? null, trend6h: s.trend6h ?? null,
+      temp: s.temp ?? null, humidity: s.humidity ?? null,
+      aqi: s.aqi ?? null, code: s.code ?? null
+    };
+  }
 
   function buildSevOptions() {
     const wrap = $("#wizSeverity");
@@ -341,6 +352,7 @@
       const b = document.createElement("button");
       b.type = "button";
       b.className = "sev-opt";
+      b.dataset.v = lvl.v;
       b.setAttribute("role", "radio");
       b.innerHTML =
         `<span class="dot" style="background:${PS.charts.severityColor(lvl.v)}"></span>` +
@@ -362,6 +374,7 @@
       const b = document.createElement("button");
       b.type = "button";
       b.className = "check-item";
+      b.dataset.sym = s;
       b.innerHTML = `<span class="box" aria-hidden="true">✓</span><span>${s}</span>`;
       b.addEventListener("click", () => {
         if (wiz.symptoms.has(s)) wiz.symptoms.delete(s); else wiz.symptoms.add(s);
@@ -371,13 +384,30 @@
     });
   }
 
-  function openWizard() {
-    wiz.step = 0; wiz.severity = null; wiz.symptoms.clear();
-    wiz.when = new Date(); wiz.snapshot = currentSnapshot(); wiz.loading = false;
-    wiz.location = settings.location ? { ...settings.location } : null;
-    $("#wizNote").value = "";
-    $$("#wizSeverity .sev-opt").forEach((o) => { o.classList.remove("on"); o.setAttribute("aria-checked", "false"); });
-    $$("#wizSymptoms .check-item").forEach((o) => o.classList.remove("on"));
+  // Open the wizard. Pass an existing entry to edit it; omit to start a new one.
+  function openWizard(entry) {
+    wiz.step = 0;
+    wiz.editId = entry ? entry.id : null;
+    wiz.loading = false;
+    if (entry) {
+      wiz.severity = entry.severity;
+      wiz.symptoms = new Set(entry.symptoms || []);
+      wiz.when = new Date(entry.ts);
+      wiz.location = entry.location ? { ...entry.location } : (settings.location ? { ...settings.location } : null);
+      wiz.snapshot = entryConditions(entry);
+    } else {
+      wiz.severity = null;
+      wiz.symptoms = new Set();
+      wiz.when = new Date();
+      wiz.location = settings.location ? { ...settings.location } : null;
+      wiz.snapshot = currentSnapshot();
+    }
+    $("#wizNote").value = entry ? (entry.note || "") : "";
+    $$("#wizSeverity .sev-opt").forEach((o) => {
+      const on = wiz.severity != null && +o.dataset.v === wiz.severity;
+      o.classList.toggle("on", on); o.setAttribute("aria-checked", on ? "true" : "false");
+    });
+    $$("#wizSymptoms .check-item").forEach((o) => o.classList.toggle("on", wiz.symptoms.has(o.dataset.sym)));
     $("#wizLocName").textContent = wiz.location ? wiz.location.name : "No location set";
     $("#wizLocSearch").hidden = true;
     $("#wizCitySearch").value = ""; $("#wizCityResults").innerHTML = "";
@@ -385,11 +415,32 @@
     const win = $("#wizWhen");
     win.max = toLocalInput(now);
     win.min = toLocalInput(new Date(now.getTime() - 91 * 864e5)); // Open-Meteo history limit
-    win.value = toLocalInput(now);
+    win.value = toLocalInput(wiz.when);
+    $("#wizTitle").textContent = entry ? "Edit entry" : "New check-in";
     renderWizSnapshot();
     $("#logWizard").hidden = false;
     document.body.style.overflow = "hidden";
     wizGoto(0);
+  }
+
+  // Save the wizard — updates the existing entry when editing, else adds new.
+  function commitWizard() {
+    const fields = {
+      ts: wiz.when.toISOString(),
+      severity: wiz.severity,
+      symptoms: [...wiz.symptoms],
+      note: $("#wizNote").value.trim(),
+      ...entryConditions(wiz.snapshot),
+      location: wiz.location
+        ? { name: wiz.location.name, latitude: wiz.location.latitude, longitude: wiz.location.longitude }
+        : null
+    };
+    if (wiz.editId) {
+      PS.store.updateLog(wiz.editId, fields);
+    } else {
+      PS.store.addLog({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ...fields });
+    }
+    renderLogList();
   }
 
   // Load the conditions for the chosen time AND place.
@@ -441,19 +492,18 @@
     $("#wizBar").style.width = `${((wiz.step + 1) / wiz.steps) * 100}%`;
     $("#wizStepLabel").textContent = `${wiz.step + 1} / ${wiz.steps}`;
     $("#wizBack").style.visibility = wiz.step === 0 ? "hidden" : "visible";
-    $("#wizNext").textContent = wiz.step === wiz.steps - 1 ? "Save entry" : "Next";
+    $("#wizNext").textContent = wiz.step === wiz.steps - 1 ? (wiz.editId ? "Save changes" : "Save entry") : "Next";
     $(".wizard-body").scrollTop = 0;
   }
 
   function wizNext() {
     if (wiz.step === 0 && wiz.severity == null) { toast("Pick how you're feeling"); return; }
     if (wiz.step === wiz.steps - 1) {
-      const sev = wiz.severity, syms = [...wiz.symptoms];
-      saveEntry(sev, syms, $("#wizNote").value.trim(), wiz.when, wiz.snapshot, wiz.location);
+      const editing = !!wiz.editId;
+      commitWizard();
       closeWizard();
       renderSnapshot();
-      const backdated = Date.now() - wiz.when.getTime() > 3600 * 1000;
-      toast(backdated ? "Back-dated entry saved" : (sev === 0 && syms.length === 0 ? "Logged a good moment ✓" : "Entry saved"));
+      toast(editing ? "Entry updated" : (Date.now() - wiz.when.getTime() > 3600 * 1000 ? "Back-dated entry saved" : "Entry saved"));
       return;
     }
     wizGoto(wiz.step + 1);
@@ -576,9 +626,18 @@
           ${cond.length ? `<div class="log-cond">${cond.join(" · ")}</div>` : ""}
           ${l.location && l.location.name ? `<div class="log-cond">📍 ${escapeHtml(l.location.name)}</div>` : ""}
         </div>
-        <button class="del-btn" aria-label="Delete entry" data-id="${l.id}">✕</button>`;
+        <div class="log-btns">
+          <button class="edit-btn" aria-label="Edit entry" data-id="${l.id}">✎</button>
+          <button class="del-btn" aria-label="Delete entry" data-id="${l.id}">✕</button>
+        </div>`;
       list.appendChild(li);
     });
+    $$("#logList .edit-btn").forEach((b) =>
+      b.addEventListener("click", () => {
+        const entry = PS.store.getLogs().find((l) => l.id === b.dataset.id);
+        if (entry) openWizard(entry);
+      })
+    );
     $$("#logList .del-btn").forEach((b) =>
       b.addEventListener("click", () => {
         PS.store.deleteLog(b.dataset.id);
@@ -675,6 +734,13 @@
         lines.push("So far there's no strong pressure difference between your good and bad days — keep logging.");
       }
     }
+    const pc = pressureChangeStats(logs);
+    if (pc) {
+      lines.push(`Your entries average a 6-hour pressure change of <strong>${fmtChangeMag(pc.avgMag)}</strong>.`);
+      if (pc.avgBadMag != null) {
+        lines.push(`On tougher days (severity 4+) that change averages <strong>${fmtChangeMag(pc.avgBadMag)}</strong> — the level pressure-change alerts watch for.`);
+      }
+    }
     const topSym = countSymptoms(logs);
     if (topSym) lines.push(`Most logged symptom: <strong>${topSym}</strong>.`);
     lines.push(`<span class="muted">This is a personal trend summary, not medical advice.
@@ -684,9 +750,70 @@
 
   function countSymptoms(logs) {
     const counts = {};
-    logs.forEach((l) => l.symptoms.forEach((s) => (counts[s] = (counts[s] || 0) + 1)));
+    logs.forEach((l) => (l.symptoms || []).forEach((s) => (counts[s] = (counts[s] || 0) + 1)));
     const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
     return top ? top[0] : null;
+  }
+
+  /* ---------- pressure-change tracking + alerts ---------- */
+  const fmtChangeMag = (hpa) =>
+    settings.pressureUnit === "inHg" ? `${PS.toInHg(hpa).toFixed(2)} inHg` : `${hpa.toFixed(1)} hPa`;
+
+  // Average magnitude of the 6h pressure change recorded across logs, overall
+  // and on tougher days — this is the personal pattern alerts are built on.
+  function pressureChangeStats(logs) {
+    const wt = logs.filter((l) => l.trend6h != null);
+    if (!wt.length) return null;
+    const mag = (a) => a.reduce((s, l) => s + Math.abs(l.trend6h), 0) / a.length;
+    const bad = wt.filter((l) => l.severity >= 4);
+    return { count: wt.length, avgMag: mag(wt), avgBadMag: bad.length ? mag(bad) : null, badCount: bad.length };
+  }
+
+  // Threshold (hPa) above which an upcoming swing is worth alerting about.
+  function alertThreshold() {
+    const pc = pressureChangeStats(PS.store.getLogs());
+    if (pc && pc.avgBadMag != null && pc.badCount >= 2) return Math.max(2, pc.avgBadMag * 0.85);
+    if (pc && pc.count >= 3) return Math.max(3, pc.avgMag);
+    return 5; // sensible default until we know the user's pattern
+  }
+
+  const NOTIFY_KEY = "ps.lastNotify";
+  function showNotification(title, body) {
+    const opts = { body, icon: "icons/icon-192.png", badge: "icons/icon-192.png", tag: "ps-pressure" };
+    if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+      navigator.serviceWorker.ready.then((reg) => reg.showNotification(title, opts))
+        .catch(() => { try { new Notification(title, opts); } catch {} });
+    } else {
+      try { new Notification(title, opts); } catch {}
+    }
+  }
+
+  // Alert when an upcoming forecast swing reaches the user's personal threshold.
+  function maybeNotifyPressure() {
+    if (!settings.notifications || !weatherData) return;
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    const cur = pressureNow();
+    let maxMag = 0, signed = 0;
+    for (const h of [3, 6, 9, 12]) {
+      const p = pressureAtOffset(h);
+      if (p == null) continue;
+      const d = p - cur;
+      if (Math.abs(d) > maxMag) { maxMag = Math.abs(d); signed = d; }
+    }
+    if (maxMag < alertThreshold()) return;
+    const last = +(localStorage.getItem(NOTIFY_KEY) || 0);
+    if (Date.now() - last < 6 * 3600 * 1000) return; // at most once per 6h
+    try { localStorage.setItem(NOTIFY_KEY, String(Date.now())); } catch {}
+    showNotification("PressureSense — pressure change ahead",
+      `Pressure is forecast to ${signed < 0 ? "drop" : "rise"} ~${fmtChangeMag(maxMag)} soon — around the level linked to your tougher days. Take it easy.`);
+  }
+
+  async function enableNotifications() {
+    if (!("Notification" in window)) { toast("Notifications aren't supported here"); return false; }
+    let perm = Notification.permission;
+    if (perm === "default") perm = await Notification.requestPermission();
+    if (perm !== "granted") { toast("Notification permission was declined"); return false; }
+    return true;
   }
 
   /* ---------- location & settings ---------- */
@@ -736,6 +863,7 @@
   // unit toggles
   $$(".seg-btn").forEach((b) =>
     b.addEventListener("click", () => {
+      if (b.dataset.notify) return; // notifications handled separately (async)
       if (b.dataset.unit) settings.pressureUnit = b.dataset.unit;
       if (b.dataset.tunit) settings.tempUnit = b.dataset.tunit;
       PS.store.saveSettings(settings);
@@ -746,9 +874,27 @@
       renderLogList();
     })
   );
+
+  // notification toggle (asks the browser for permission when turned on)
+  $$("[data-notify]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      if (b.dataset.notify === "on") {
+        const ok = await enableNotifications();
+        settings.notifications = ok;
+        if (ok) { toast("Alerts on — I'll flag big pressure swings"); maybeNotifyPressure(); }
+      } else {
+        settings.notifications = false;
+        toast("Alerts off");
+      }
+      PS.store.saveSettings(settings);
+      syncSegButtons();
+    })
+  );
+
   function syncSegButtons() {
     $$("[data-unit]").forEach((b) => b.classList.toggle("on", b.dataset.unit === settings.pressureUnit));
     $$("[data-tunit]").forEach((b) => b.classList.toggle("on", b.dataset.tunit === settings.tempUnit));
+    $$("[data-notify]").forEach((b) => b.classList.toggle("on", (b.dataset.notify === "on") === !!settings.notifications));
   }
 
   function setLocation(loc) {
@@ -780,6 +926,7 @@
       weatherData = await PS.weather.fetchWeather(latitude, longitude);
       renderNow();
       renderSnapshot();
+      maybeNotifyPressure();
       // refresh whichever secondary view is open
       const open = $$(".view").find((v) => !v.hidden);
       if (open && open.id === "view-forecast") renderForecast();

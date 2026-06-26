@@ -1,6 +1,6 @@
 /* Offline support: cache the app shell so it opens without a connection.
    Weather requests always go to the network (and fail gracefully offline). */
-const CACHE = "pressuresense-v8";
+const CACHE = "pressuresense-v9";
 const SHELL = [
   "./",
   "./index.html",
@@ -38,5 +38,16 @@ self.addEventListener("fetch", (e) => {
   // App shell: cache-first, fall back to network.
   e.respondWith(
     caches.match(e.request).then((hit) => hit || fetch(e.request).catch(() => caches.match("./index.html")))
+  );
+});
+
+// Tapping a pressure-change alert focuses (or opens) the app.
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients.matchAll({ type: "window" }).then((cs) => {
+      for (const c of cs) if ("focus" in c) return c.focus();
+      if (self.clients.openWindow) return self.clients.openWindow("./");
+    })
   );
 });
