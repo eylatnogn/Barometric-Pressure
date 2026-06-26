@@ -161,9 +161,12 @@
   <!-- Log check-in wizard (full-screen, step by step) -->
   <div id="logWizard" class="wizard" hidden aria-label="New log check-in" role="dialog" aria-modal="true">
     <header class="wizard-head">
-      <button id="wizClose" class="wiz-x" type="button" aria-label="Close">✕</button>
+      <div class="wizard-head-top">
+        <button id="wizClose" class="wiz-x" type="button" aria-label="Close">✕</button>
+        <span id="wizTitle" class="wiz-title">New check-in</span>
+        <span id="wizStepLabel" class="wiz-step-label">1 / 3</span>
+      </div>
       <div class="wizard-progress"><span id="wizBar" class="wizard-bar"></span></div>
-      <span id="wizStepLabel" class="wiz-step-label">1 / 3</span>
     </header>
 
     <div class="wizard-body">
@@ -238,6 +241,14 @@
           <button type="button" class="seg-btn" data-tunit="F">°F</button>
         </div>
       </div>
+      <div class="settings-row">
+        <span>Pressure-change alerts</span>
+        <div class="seg" role="group" aria-label="Pressure-change alerts">
+          <button type="button" class="seg-btn" data-notify="on">On</button>
+          <button type="button" class="seg-btn" data-notify="off">Off</button>
+        </div>
+      </div>
+      <p class="settings-note muted">Alerts warn you when a forecast pressure swing matches your personal pattern. They appear while the app is open in the background.</p>
 
       <button class="text-btn close-btn" value="close" type="submit">Done</button>
     </form>

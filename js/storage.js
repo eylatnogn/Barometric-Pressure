@@ -9,9 +9,10 @@ PS.store = (() => {
     settings: {
       location: null,        // { name, latitude, longitude }
       pressureUnit: "hPa",   // or "inHg"
-      tempUnit: "C"          // or "F"
+      tempUnit: "C",         // or "F"
+      notifications: false   // pressure-change alerts opt-in
     },
-    logs: []                 // [{ id, ts, severity, symptoms[], note, pressure }]
+    logs: []                 // [{ id, ts, severity, symptoms[], note, pressure, ... }]
   };
 
   function read(key) {
@@ -25,6 +26,7 @@ PS.store = (() => {
   function write(key, val) {
     try { localStorage.setItem(KEYS[key], JSON.stringify(val)); } catch {}
   }
+  const byNewest = (a, b) => new Date(b.ts) - new Date(a.ts);
 
   return {
     getSettings: () => ({ ...defaults.settings, ...read("settings") }),
@@ -33,7 +35,14 @@ PS.store = (() => {
     getLogs: () => read("logs"),
     addLog: (entry) => {
       const logs = read("logs");
-      logs.unshift(entry);
+      logs.push(entry);
+      logs.sort(byNewest);     // keep chronological even for back-dated entries
+      write("logs", logs);
+      return logs;
+    },
+    updateLog: (id, patch) => {
+      const logs = read("logs").map((l) => (l.id === id ? { ...l, ...patch, id } : l));
+      logs.sort(byNewest);
       write("logs", logs);
       return logs;
     },

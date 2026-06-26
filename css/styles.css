@@ -233,7 +233,10 @@ textarea, input[type="search"] {
 .log-sym { font-size: 14px; margin-top: 2px; }
 .log-note { font-size: 14px; color: var(--text-dim); margin-top: 2px; word-break: break-word; }
 .log-press { font-size: 13px; color: var(--text-dim); }
-.del-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 18px; padding: 4px 8px; }
+.log-btns { display: flex; flex-direction: column; gap: 2px; flex: none; }
+.del-btn, .edit-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 17px; padding: 4px 8px; }
+.edit-btn { color: var(--accent); }
+.settings-note { font-size: 12.5px; margin: -4px 0 0; }
 
 /* Insight */
 .insight { font-size: 15px; line-height: 1.6; }
@@ -353,10 +356,12 @@ textarea, input[type="search"] {
 }
 /* Author display:flex would otherwise defeat the [hidden] attribute. */
 .wizard[hidden] { display: none; }
-.wizard-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+.wizard-head { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; }
+.wizard-head-top { display: flex; align-items: center; gap: 12px; }
+.wiz-title { flex: 1; font-weight: 700; font-size: 16px; }
 .wiz-x { flex: none; width: 38px; height: 38px; border-radius: 999px; border: 1px solid var(--line);
   background: var(--card); color: var(--text); font-size: 16px; cursor: pointer; }
-.wizard-progress { flex: 1; height: 6px; border-radius: 999px; background: var(--card-2); overflow: hidden; }
+.wizard-progress { height: 6px; border-radius: 999px; background: var(--card-2); overflow: hidden; }
 .wizard-bar { display: block; height: 100%; width: 33%; background: var(--accent); transition: width .25s ease; }
 .wiz-step-label { flex: none; font-size: 13px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 

@@ -185,6 +185,16 @@ PS.report = (() => {
       pdf.paragraph(R("Log more good and bad days to compare pressure between them."), { color: DIM });
     }
 
+    // Average pressure change (the basis for alerts)
+    const fmtMag = (h) => pUnit === "inHg" ? `${(h * 0.0295299831).toFixed(2)} inHg` : `${h.toFixed(1)} hPa`;
+    const wt = logs.filter((l) => l.trend6h != null);
+    if (wt.length) {
+      const mag = (a) => a.reduce((s, l) => s + Math.abs(l.trend6h), 0) / a.length;
+      pdf.paragraph([...RB("Average 6-hour pressure change at logging: "), ...R(fmtMag(mag(wt)))]);
+      const bad = wt.filter((l) => l.severity >= 4);
+      if (bad.length) pdf.paragraph([...RB("On tougher days (severity 4+): "), ...R(`${fmtMag(mag(bad))} average change`)]);
+    }
+
     // Symptom frequency
     const counts = {};
     logs.forEach((l) => (l.symptoms || []).forEach((s) => (counts[s] = (counts[s] || 0) + 1)));
