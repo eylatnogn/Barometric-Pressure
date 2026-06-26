@@ -331,7 +331,7 @@
     { v: 9, name: "Severe", range: "9–10" }
   ];
 
-  const wiz = { step: 0, severity: null, symptoms: new Set(), steps: 3,
+  const wiz = { step: 0, severity: null, symptoms: new Set(), foods: new Set(), steps: 4,
     when: new Date(), location: null, snapshot: null, loading: false, editId: null };
 
   // Normalize the weather fields of an entry/snapshot into a consistent shape,
@@ -384,6 +384,23 @@
     });
   }
 
+  function buildFoodChips() {
+    const wrap = $("#wizFoods");
+    wrap.innerHTML = "";
+    PS.config.foodTriggers.forEach((f) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "check-item";
+      b.dataset.food = f;
+      b.innerHTML = `<span class="box" aria-hidden="true">✓</span><span>${f}</span>`;
+      b.addEventListener("click", () => {
+        if (wiz.foods.has(f)) wiz.foods.delete(f); else wiz.foods.add(f);
+        b.classList.toggle("on", wiz.foods.has(f));
+      });
+      wrap.appendChild(b);
+    });
+  }
+
   // Open the wizard. Pass an existing entry to edit it; omit to start a new one.
   function openWizard(entry) {
     wiz.step = 0;
@@ -392,22 +409,26 @@
     if (entry) {
       wiz.severity = entry.severity;
       wiz.symptoms = new Set(entry.symptoms || []);
+      wiz.foods = new Set(entry.foods || []);
       wiz.when = new Date(entry.ts);
       wiz.location = entry.location ? { ...entry.location } : (settings.location ? { ...settings.location } : null);
       wiz.snapshot = entryConditions(entry);
     } else {
       wiz.severity = null;
       wiz.symptoms = new Set();
+      wiz.foods = new Set();
       wiz.when = new Date();
       wiz.location = settings.location ? { ...settings.location } : null;
       wiz.snapshot = currentSnapshot();
     }
     $("#wizNote").value = entry ? (entry.note || "") : "";
+    $("#wizDietNote").value = entry ? (entry.dietNote || "") : "";
     $$("#wizSeverity .sev-opt").forEach((o) => {
       const on = wiz.severity != null && +o.dataset.v === wiz.severity;
       o.classList.toggle("on", on); o.setAttribute("aria-checked", on ? "true" : "false");
     });
     $$("#wizSymptoms .check-item").forEach((o) => o.classList.toggle("on", wiz.symptoms.has(o.dataset.sym)));
+    $$("#wizFoods .check-item").forEach((o) => o.classList.toggle("on", wiz.foods.has(o.dataset.food)));
     $("#wizLocName").textContent = wiz.location ? wiz.location.name : "No location set";
     $("#wizLocSearch").hidden = true;
     $("#wizCitySearch").value = ""; $("#wizCityResults").innerHTML = "";
@@ -429,6 +450,8 @@
       ts: wiz.when.toISOString(),
       severity: wiz.severity,
       symptoms: [...wiz.symptoms],
+      foods: [...wiz.foods],
+      dietNote: $("#wizDietNote").value.trim(),
       note: $("#wizNote").value.trim(),
       ...entryConditions(wiz.snapshot),
       location: wiz.location
@@ -624,6 +647,7 @@
           ${l.note ? `<div class="log-note">${escapeHtml(l.note)}</div>` : ""}
           <div class="log-press">Pressure: ${press}</div>
           ${cond.length ? `<div class="log-cond">${cond.join(" · ")}</div>` : ""}
+          ${(l.foods && l.foods.length) || l.dietNote ? `<div class="log-cond">🍽 ${escapeHtml([...(l.foods || []), l.dietNote].filter(Boolean).join(" · "))}</div>` : ""}
           ${l.location && l.location.name ? `<div class="log-cond">📍 ${escapeHtml(l.location.name)}</div>` : ""}
         </div>
         <div class="log-btns">
@@ -655,15 +679,17 @@
   $("#exportBtn").addEventListener("click", () => {
     const logs = PS.store.getLogs();
     if (!logs.length) { toast("Nothing to export yet"); return; }
-    const header = "timestamp,severity,symptoms,pressure_hpa,pressure_change_6h,temp_c,humidity_pct,us_aqi,note\n";
+    const csv = (s) => `"${String(s).replace(/"/g, '""')}"`;
+    const header = "timestamp,severity,symptoms,foods,diet_note,pressure_hpa,pressure_change_6h,temp_c,humidity_pct,us_aqi,note\n";
     const rows = logs.map((l) =>
-      [l.ts, l.severity, `"${l.symptoms.join("; ")}"`,
+      [l.ts, l.severity, csv((l.symptoms || []).join("; ")),
+       csv((l.foods || []).join("; ")), csv(l.dietNote || ""),
        l.pressure != null ? l.pressure.toFixed(1) : "",
        l.trend6h != null ? l.trend6h.toFixed(1) : "",
        l.temp != null ? l.temp.toFixed(1) : "",
        l.humidity != null ? Math.round(l.humidity) : "",
        l.aqi != null ? Math.round(l.aqi) : "",
-       `"${(l.note || "").replace(/"/g, '""')}"`].join(",")
+       csv(l.note || "")].join(",")
     ).join("\n");
     const blob = new Blob([header + rows], { type: "text/csv" });
     const a = document.createElement("a");
@@ -941,6 +967,7 @@
   function init() {
     buildSevOptions();
     buildWizSymptoms();
+    buildFoodChips();
     renderLogList();
     syncSegButtons();
 
