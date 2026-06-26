@@ -227,6 +227,25 @@ PS.report = (() => {
     if (condRows.length) pdf.table(null, condRows, [0.5, 0.5].map((f) => ({ w: f * pdf.contentW })));
     else pdf.paragraph(R("No weather conditions were attached to these entries yet."), { color: DIM });
 
+    // Possible food triggers — avg severity on days each food was logged vs overall
+    const overallAvg = avg;
+    const foodSev = {};
+    logs.forEach((l) => (l.foods || []).forEach((f) => (foodSev[f] = foodSev[f] || []).push(l.severity)));
+    const foodRows = Object.entries(foodSev)
+      .filter(([, a]) => a.length >= 2)
+      .map(([f, a]) => { const m = a.reduce((s, v) => s + v, 0) / a.length; return { f, n: a.length, m, diff: m - overallAvg }; })
+      .sort((a, b) => b.diff - a.diff);
+    if (foodRows.length) {
+      pdf.heading("Possible food triggers", 2);
+      pdf.paragraph(R(`Average symptom severity on days each food was logged, versus your overall average of ${overallAvg.toFixed(1)}. A higher value may be worth discussing with a clinician — this is a correlation, not a diagnosis.`), { color: DIM, gap: 8 });
+      const rows = foodRows.map((r) => [
+        { t: r.f }, { t: String(r.n) }, { t: r.m.toFixed(1) },
+        { t: (r.diff >= 0 ? "+" : "") + r.diff.toFixed(1), color: r.diff >= 1 ? BAD : (r.diff <= -1 ? GOOD : INK), bold: Math.abs(r.diff) >= 1 }
+      ]);
+      pdf.table([{ t: "Food" }, { t: "Times" }, { t: "Avg severity" }, { t: "vs overall" }],
+        rows, [0.4, 0.18, 0.22, 0.2].map((f) => ({ w: f * pdf.contentW })));
+    }
+
     // Detailed breakdown (at the end)
     pdf.newPage();
     pdf.heading("Detailed log", 2);
@@ -237,6 +256,7 @@ PS.report = (() => {
       pdf.paragraph([...RB(fmtDate(l.ts)), ...R(`    Severity ${l.severity} (${sevLabel(l.severity)})`)], { size: 11, leading: 15, gap: 2 });
       if (l.location && l.location.name) pdf.paragraph([...RB("Location: "), ...R(l.location.name)], { gap: 2 });
       if ((l.symptoms || []).length) pdf.paragraph([...RB("Symptoms: "), ...R(l.symptoms.join(", "))], { gap: 2 });
+      if ((l.foods || []).length || l.dietNote) pdf.paragraph([...RB("Diet: "), ...R([...(l.foods || []), l.dietNote].filter(Boolean).join(", "))], { gap: 2 });
       const cond = [];
       if (l.pressure != null) cond.push(`Pressure ${PS.fmtPressure(l.pressure, pUnit)} ${pUnit}${l.trend6h != null ? ` (${PS.fmtPressureDelta(l.trend6h, pUnit)} /6h)` : ""}`);
       if (l.temp != null) cond.push(`Temp ${PS.fmtTemp(l.temp, tUnit)}`);

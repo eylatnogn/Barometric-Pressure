@@ -18,6 +18,16 @@ PS.config = {
     "Ear pressure", "Brain fog", "Fatigue", "Imbalance", "Neck tension"
   ],
 
+  // Common trigger-food categories — high-histamine foods, histamine liberators,
+  // and frequent allergens/sensitivities. Tracking these helps surface food
+  // patterns alongside the weather ones.
+  foodTriggers: [
+    "Aged cheese", "Fermented foods", "Alcohol / wine", "Cured / smoked meat",
+    "Fish / shellfish", "Tomatoes", "Citrus", "Chocolate", "Vinegar / pickled",
+    "Leftovers", "Dairy", "Gluten / wheat", "Eggs", "Caffeine",
+    "Nuts", "Soy", "Nightshades", "Processed / MSG"
+  ],
+
   weatherCodes: {
     0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
     45: "Fog", 48: "Rime fog", 51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle",
