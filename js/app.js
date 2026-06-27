@@ -747,21 +747,12 @@
   /* ---------- TRENDS view ---------- */
   function renderTrends() {
     const logs = PS.store.getLogs();
-    const insight = $("#insightCard");
-
-    if (weatherData) {
-      const past = weatherData.series.filter((p) => p.t.getTime() <= Date.now()).slice(-48);
-      const markers = logs
-        .map((l) => ({ t: new Date(l.ts), severity: l.severity }))
-        .filter((m) => past.length && m.t.getTime() >= past[0].t.getTime());
-      PS.charts.pressureLine($("#chartTrends"), past, {
-        unit: settings.pressureUnit,
-        nowTime: weatherData.current.time,
-        markers
-      });
-    }
-
-    insight.innerHTML = computeInsight(logs);
+    // Plot the actual logged entries across their whole history (oldest → newest).
+    const entries = logs
+      .map((l) => ({ t: new Date(l.ts), severity: l.severity, pressure: l.pressure ?? null }))
+      .sort((a, b) => a.t - b.t);
+    PS.charts.logTimeline($("#chartTrends"), entries, { unit: settings.pressureUnit });
+    $("#insightCard").innerHTML = computeInsight(logs);
   }
 
   // Lightweight correlation: compare 6h pressure change preceding each logged
