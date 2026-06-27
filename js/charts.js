@@ -153,5 +153,93 @@ PS.charts = (() => {
     return css("--text-dim");
   }
 
-  return { pressureLine, severityColor };
+  // Timeline of the user's ACTUAL logged entries across their whole date range:
+  // each entry's severity as a lollipop (left axis, 0-10, colored by severity)
+  // with the pressure recorded at each entry drawn as a line (right axis).
+  // entries: [{ t: Date, severity: number, pressure: number|null }] (sorted asc)
+  function logTimeline(canvas, entries, opts = {}) {
+    const { ctx, w, h } = setup(canvas);
+    ctx.clearRect(0, 0, w, h);
+    const dim = css("--text-dim"), grid = css("--line"), accent = css("--accent");
+
+    ctx.textBaseline = "middle";
+    if (!entries.length) {
+      ctx.fillStyle = dim; ctx.font = "13px system-ui, sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("Log entries to see them charted here.", w / 2, h / 2);
+      return;
+    }
+
+    const padL = 30, padR = 46, padT = 24, padB = 26;
+    const plotW = w - padL - padR, plotH = h - padT - padB;
+    let t0 = entries[0].t.getTime(), t1 = entries[entries.length - 1].t.getTime();
+    if (t0 === t1) { t0 -= 6 * 3600e3; t1 += 6 * 3600e3; }
+    const span = t1 - t0;
+    const X = (t) => padL + ((t - t0) / span) * plotW;
+    const Ys = (v) => padT + (1 - v / 10) * plotH;       // severity axis (left)
+
+    const press = entries.filter((e) => e.pressure != null);
+    let pmin, pmax, Yp = null;
+    if (press.length) {
+      const b = niceBounds(press.map((e) => e.pressure));
+      pmin = b.min; pmax = b.max;
+      Yp = (v) => padT + (1 - (v - pmin) / (pmax - pmin)) * plotH;
+    }
+
+    // grid + left severity labels
+    ctx.font = "11px system-ui, sans-serif";
+    [0, 5, 10].forEach((v) => {
+      const yy = Ys(v);
+      ctx.strokeStyle = grid; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(w - padR, yy); ctx.stroke();
+      ctx.fillStyle = dim; ctx.textAlign = "right"; ctx.fillText(String(v), padL - 5, yy);
+    });
+    // right pressure labels
+    if (Yp) {
+      ctx.textAlign = "left"; ctx.fillStyle = accent;
+      [pmax, (pmin + pmax) / 2, pmin].forEach((v) => {
+        const lab = opts.unit === "inHg" ? PS.toInHg(v).toFixed(2) : String(Math.round(v));
+        ctx.fillText(lab, w - padR + 5, Yp(v));
+      });
+    }
+
+    // pressure line (right axis)
+    if (Yp) {
+      ctx.beginPath();
+      press.forEach((e, i) => { const xx = X(e.t.getTime()), yy = Yp(e.pressure); i ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy); });
+      ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.lineJoin = "round";
+      ctx.globalAlpha = 0.85; ctx.stroke(); ctx.globalAlpha = 1;
+      press.forEach((e) => { ctx.beginPath(); ctx.arc(X(e.t.getTime()), Yp(e.pressure), 2, 0, Math.PI * 2); ctx.fillStyle = accent; ctx.fill(); });
+    }
+
+    // severity lollipops (left axis)
+    const baseY = Ys(0);
+    entries.forEach((e) => {
+      const xx = X(e.t.getTime()), yy = Ys(e.severity);
+      ctx.strokeStyle = grid; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(xx, baseY); ctx.lineTo(xx, yy); ctx.stroke();
+      ctx.beginPath(); ctx.arc(xx, yy, 3 + e.severity * 0.4, 0, Math.PI * 2);
+      ctx.fillStyle = severityColor(e.severity); ctx.fill();
+      ctx.lineWidth = 1; ctx.strokeStyle = css("--card"); ctx.stroke();
+    });
+
+    // x date labels
+    ctx.fillStyle = dim; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+    const n = Math.min(4, Math.max(2, entries.length));
+    for (let i = 0; i < n; i++) {
+      const tt = t0 + (span * i) / (n - 1);
+      ctx.fillText(new Date(tt).toLocaleDateString([], { month: "short", day: "numeric" }), X(tt), h - 8);
+    }
+
+    // legend
+    ctx.textBaseline = "middle"; ctx.font = "10px system-ui, sans-serif";
+    ctx.fillStyle = severityColor(6); ctx.beginPath(); ctx.arc(padL + 4, 11, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = dim; ctx.textAlign = "left"; ctx.fillText("Severity", padL + 12, 11);
+    if (Yp) {
+      ctx.strokeStyle = accent; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(padL + 66, 11); ctx.lineTo(padL + 82, 11); ctx.stroke();
+      ctx.fillStyle = dim; ctx.fillText("Pressure", padL + 88, 11);
+    }
+  }
+
+  return { pressureLine, severityColor, logTimeline };
 })();
