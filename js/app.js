@@ -16,6 +16,33 @@
     toast._t = setTimeout(() => (el.hidden = true), 2600);
   }
 
+  // Promise-based confirm dialog. Resolves true only if the user confirms.
+  function askConfirm({ title, body = "", confirmText = "Confirm" }) {
+    return new Promise((resolve) => {
+      const dlg = $("#confirmDialog");
+      $("#confirmTitle").textContent = title;
+      $("#confirmBody").textContent = body;
+      $("#confirmOk").textContent = confirmText;
+      let done = false;
+      const finish = (val) => {
+        if (done) return;
+        done = true;
+        $("#confirmOk").removeEventListener("click", onOk);
+        $("#confirmCancel").removeEventListener("click", onCancel);
+        dlg.removeEventListener("close", onClose);
+        if (dlg.open) dlg.close();
+        resolve(val);
+      };
+      const onOk = () => finish(true);
+      const onCancel = () => finish(false);
+      const onClose = () => finish(false); // backdrop / Esc
+      $("#confirmOk").addEventListener("click", onOk);
+      $("#confirmCancel").addEventListener("click", onCancel);
+      dlg.addEventListener("close", onClose);
+      dlg.showModal();
+    });
+  }
+
   // pressure (hPa) at or nearest to a given offset of hours from "now"
   function pressureAtOffset(hours) {
     if (!weatherData) return null;
@@ -694,10 +721,65 @@
       })
     );
     $$("#logList .del-btn").forEach((b) =>
-      b.addEventListener("click", () => {
+      b.addEventListener("click", async () => {
+        const ok = await askConfirm({
+          title: "Delete this entry?",
+          body: "It moves to Recently deleted and can be restored for 30 days.",
+          confirmText: "Delete"
+        });
+        if (!ok) return;
         PS.store.deleteLog(b.dataset.id);
         renderLogList();
-        toast("Entry deleted");
+        toast("Entry deleted — recover within 30 days");
+      })
+    );
+    renderTrash();
+  }
+
+  function renderTrash() {
+    const card = $("#trashCard"), list = $("#trashList");
+    if (!card || !list) return;
+    const trash = PS.store.getTrash();
+    if (!trash.length) { card.hidden = true; list.innerHTML = ""; return; }
+    card.hidden = false;
+    list.innerHTML = "";
+    const ttl = PS.store.trashTtlDays();
+    trash.forEach((l) => {
+      const li = document.createElement("li");
+      li.className = "log-item";
+      const when = new Date(l.ts).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+      const daysLeft = Math.max(0, ttl - Math.floor((Date.now() - new Date(l.deletedAt).getTime()) / 864e5));
+      li.innerHTML = `
+        <span class="sev-badge" style="background:${PS.charts.severityColor(l.severity)}">${l.severity}</span>
+        <div class="log-meta">
+          <div class="log-when">${when}</div>
+          ${(l.symptoms && l.symptoms.length) ? `<div class="log-sym">${l.symptoms.join(" · ")}</div>` : ""}
+          <div class="log-cond">🗑 ${daysLeft} day${daysLeft === 1 ? "" : "s"} left to restore</div>
+        </div>
+        <div class="log-btns">
+          <button class="restore-btn" data-id="${l.id}" aria-label="Restore entry" title="Restore">↩</button>
+          <button class="purge-btn" data-id="${l.id}" aria-label="Delete forever" title="Delete forever">✕</button>
+        </div>`;
+      list.appendChild(li);
+    });
+    $$("#trashList .restore-btn").forEach((b) =>
+      b.addEventListener("click", () => {
+        PS.store.restoreLog(b.dataset.id);
+        renderLogList();
+        toast("Entry restored");
+      })
+    );
+    $$("#trashList .purge-btn").forEach((b) =>
+      b.addEventListener("click", async () => {
+        const ok = await askConfirm({
+          title: "Delete forever?",
+          body: "This permanently removes the entry. It can't be undone.",
+          confirmText: "Delete forever"
+        });
+        if (!ok) return;
+        PS.store.purgeLog(b.dataset.id);
+        renderTrash();
+        toast("Permanently deleted");
       })
     );
   }
