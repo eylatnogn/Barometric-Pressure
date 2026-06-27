@@ -331,8 +331,29 @@
     { v: 9, name: "Severe", range: "9–10" }
   ];
 
-  const wiz = { step: 0, severity: null, symptoms: new Set(), foods: new Set(), steps: 4,
+  const wiz = { step: 0, severity: null, symptoms: new Set(), foods: new Set(),
+    env: new Set(), stress: new Set(), steps: 5,
     when: new Date(), location: null, snapshot: null, loading: false, editId: null };
+
+  // Generic multi-select checklist builder. Reads/writes wiz[field] at click
+  // time, so it keeps working after openWizard swaps in a fresh Set.
+  function buildChecklist(containerSel, items, field) {
+    const wrap = $(containerSel);
+    wrap.innerHTML = "";
+    items.forEach((it) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "check-item";
+      b.dataset.val = it;
+      b.innerHTML = `<span class="box" aria-hidden="true">✓</span><span>${it}</span>`;
+      b.addEventListener("click", () => {
+        const set = wiz[field];
+        if (set.has(it)) set.delete(it); else set.add(it);
+        b.classList.toggle("on", set.has(it));
+      });
+      wrap.appendChild(b);
+    });
+  }
 
   // Normalize the weather fields of an entry/snapshot into a consistent shape,
   // so editing always overwrites cleanly (no stale keys left behind).
@@ -410,6 +431,8 @@
       wiz.severity = entry.severity;
       wiz.symptoms = new Set(entry.symptoms || []);
       wiz.foods = new Set(entry.foods || []);
+      wiz.env = new Set(entry.environment || []);
+      wiz.stress = new Set(entry.stress || []);
       wiz.when = new Date(entry.ts);
       wiz.location = entry.location ? { ...entry.location } : (settings.location ? { ...settings.location } : null);
       wiz.snapshot = entryConditions(entry);
@@ -417,6 +440,8 @@
       wiz.severity = null;
       wiz.symptoms = new Set();
       wiz.foods = new Set();
+      wiz.env = new Set();
+      wiz.stress = new Set();
       wiz.when = new Date();
       wiz.location = settings.location ? { ...settings.location } : null;
       wiz.snapshot = currentSnapshot();
@@ -429,6 +454,8 @@
     });
     $$("#wizSymptoms .check-item").forEach((o) => o.classList.toggle("on", wiz.symptoms.has(o.dataset.sym)));
     $$("#wizFoods .check-item").forEach((o) => o.classList.toggle("on", wiz.foods.has(o.dataset.food)));
+    $$("#wizEnv .check-item").forEach((o) => o.classList.toggle("on", wiz.env.has(o.dataset.val)));
+    $$("#wizStress .check-item").forEach((o) => o.classList.toggle("on", wiz.stress.has(o.dataset.val)));
     $("#wizLocName").textContent = wiz.location ? wiz.location.name : "No location set";
     $("#wizLocSearch").hidden = true;
     $("#wizCitySearch").value = ""; $("#wizCityResults").innerHTML = "";
@@ -451,6 +478,8 @@
       severity: wiz.severity,
       symptoms: [...wiz.symptoms],
       foods: [...wiz.foods],
+      environment: [...wiz.env],
+      stress: [...wiz.stress],
       dietNote: $("#wizDietNote").value.trim(),
       note: $("#wizNote").value.trim(),
       ...entryConditions(wiz.snapshot),
@@ -648,6 +677,8 @@
           <div class="log-press">Pressure: ${press}</div>
           ${cond.length ? `<div class="log-cond">${cond.join(" · ")}</div>` : ""}
           ${(l.foods && l.foods.length) || l.dietNote ? `<div class="log-cond">🍽 ${escapeHtml([...(l.foods || []), l.dietNote].filter(Boolean).join(" · "))}</div>` : ""}
+          ${l.environment && l.environment.length ? `<div class="log-cond">🌿 ${escapeHtml(l.environment.join(" · "))}</div>` : ""}
+          ${l.stress && l.stress.length ? `<div class="log-cond">🧠 ${escapeHtml(l.stress.join(" · "))}</div>` : ""}
           ${l.location && l.location.name ? `<div class="log-cond">📍 ${escapeHtml(l.location.name)}</div>` : ""}
         </div>
         <div class="log-btns">
@@ -680,10 +711,11 @@
     const logs = PS.store.getLogs();
     if (!logs.length) { toast("Nothing to export yet"); return; }
     const csv = (s) => `"${String(s).replace(/"/g, '""')}"`;
-    const header = "timestamp,severity,symptoms,foods,diet_note,pressure_hpa,pressure_change_6h,temp_c,humidity_pct,us_aqi,note\n";
+    const header = "timestamp,severity,symptoms,foods,diet_note,environment,stress,pressure_hpa,pressure_change_6h,temp_c,humidity_pct,us_aqi,note\n";
     const rows = logs.map((l) =>
       [l.ts, l.severity, csv((l.symptoms || []).join("; ")),
        csv((l.foods || []).join("; ")), csv(l.dietNote || ""),
+       csv((l.environment || []).join("; ")), csv((l.stress || []).join("; ")),
        l.pressure != null ? l.pressure.toFixed(1) : "",
        l.trend6h != null ? l.trend6h.toFixed(1) : "",
        l.temp != null ? l.temp.toFixed(1) : "",
@@ -769,6 +801,8 @@
     }
     const topSym = countSymptoms(logs);
     if (topSym) lines.push(`Most logged symptom: <strong>${topSym}</strong>.`);
+    const ta = topAssociation(logs);
+    if (ta) lines.push(`Your <strong>${ta.label}</strong> (${ta.cat}) entries average <strong>${ta.lift.toFixed(1)} higher</strong> severity than usual — a possible trigger worth watching.`);
     lines.push(`<span class="muted">This is a personal trend summary, not medical advice.
       Share your exported log with your clinician.</span>`);
     return lines.map((l) => `<p>${l}</p>`).join("");
@@ -779,6 +813,27 @@
     logs.forEach((l) => (l.symptoms || []).forEach((s) => (counts[s] = (counts[s] || 0) + 1)));
     const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
     return top ? top[0] : null;
+  }
+
+  // The trigger (food / environmental / stress) most associated with worse
+  // days: highest average-severity lift above the overall average, seen 2+ times.
+  function topAssociation(logs) {
+    if (logs.length < 4) return null;
+    const overall = logs.reduce((s, l) => s + l.severity, 0) / logs.length;
+    const acc = {};
+    [["food", "foods"], ["environmental", "environment"], ["stress", "stress"]].forEach(([cat, field]) =>
+      logs.forEach((l) => (l[field] || []).forEach((x) => {
+        const k = field + "|" + x;
+        (acc[k] = acc[k] || { label: x, cat, sev: [] }).sev.push(l.severity);
+      }))
+    );
+    let best = null;
+    Object.values(acc).forEach((o) => {
+      if (o.sev.length < 2) return;
+      const lift = o.sev.reduce((s, v) => s + v, 0) / o.sev.length - overall;
+      if (!best || lift > best.lift) best = { label: o.label, cat: o.cat, lift, n: o.sev.length };
+    });
+    return best && best.lift >= 1 ? best : null;
   }
 
   /* ---------- pressure-change tracking + alerts ---------- */
@@ -968,6 +1023,8 @@
     buildSevOptions();
     buildWizSymptoms();
     buildFoodChips();
+    buildChecklist("#wizEnv", PS.config.envTriggers, "env");
+    buildChecklist("#wizStress", PS.config.stressTriggers, "stress");
     renderLogList();
     syncSegButtons();
 

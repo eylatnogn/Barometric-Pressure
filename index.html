@@ -122,7 +122,8 @@
           <li><span class="pv-num">1</span> How are you feeling overall?</li>
           <li><span class="pv-num">2</span> Which symptoms, if any?</li>
           <li><span class="pv-num">3</span> What did you eat or drink?</li>
-          <li><span class="pv-num">4</span> When, where &amp; any notes</li>
+          <li><span class="pv-num">4</span> Environment &amp; stress factors</li>
+          <li><span class="pv-num">5</span> When, where &amp; any notes</li>
         </ol>
         <div id="logSnapshot" class="log-snapshot">Reading current conditions…</div>
         <button id="startLogBtn" class="primary-btn full" type="button">Continue to fill out today's log →</button>
@@ -188,14 +189,24 @@
       <!-- Step 3: diet -->
       <section class="wiz-step" data-step="2" hidden>
         <h2 class="wiz-q">What did you eat or drink?</h2>
-        <p class="wiz-hint">Some foods — especially high-histamine ones — can flare symptoms. Tap any you had; add specifics below.</p>
+        <p class="wiz-hint">Some foods — especially high-histamine ones and allergens — can flare symptoms. Tap any you had; add specifics below.</p>
         <div id="wizFoods" class="checklist"></div>
         <label class="field-label" for="wizDietNote">Specific foods or drinks <span class="muted">(optional)</span></label>
         <textarea id="wizDietNote" rows="2" placeholder="e.g. aged cheddar, red wine, leftover curry"></textarea>
       </section>
 
-      <!-- Step 4: when + where + notes + review -->
+      <!-- Step 4: environment + stress -->
       <section class="wiz-step" data-step="3" hidden>
+        <h2 class="wiz-q">Environment &amp; stress</h2>
+        <p class="wiz-hint">Allergens, air quality, and strain can all set off symptoms. Tap any that applied.</p>
+        <div class="wiz-group-label">Airborne &amp; environmental</div>
+        <div id="wizEnv" class="checklist"></div>
+        <div class="wiz-group-label">Stress &amp; strain</div>
+        <div id="wizStress" class="checklist"></div>
+      </section>
+
+      <!-- Step 5: when + where + notes + review -->
+      <section class="wiz-step" data-step="4" hidden>
         <h2 class="wiz-q">When and where?</h2>
         <p class="wiz-hint">Defaults to now and your saved location — change either to log an earlier day or a different place.</p>
 

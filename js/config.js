@@ -19,13 +19,27 @@ PS.config = {
   ],
 
   // Common trigger-food categories — high-histamine foods, histamine liberators,
-  // and frequent allergens/sensitivities. Tracking these helps surface food
-  // patterns alongside the weather ones.
+  // and the major food allergens. Tracking these helps surface food patterns
+  // alongside the weather ones.
   foodTriggers: [
     "Aged cheese", "Fermented foods", "Alcohol / wine", "Cured / smoked meat",
     "Fish / shellfish", "Tomatoes", "Citrus", "Chocolate", "Vinegar / pickled",
     "Leftovers", "Dairy", "Gluten / wheat", "Eggs", "Caffeine",
-    "Nuts", "Soy", "Nightshades", "Processed / MSG"
+    "Peanuts", "Tree nuts", "Soy", "Sesame", "Nightshades", "Processed / MSG"
+  ],
+
+  // Airborne / nasal allergens and environmental exposures.
+  envTriggers: [
+    "High pollen", "Dust", "Pet dander", "Mold", "Smoke",
+    "Strong fragrance / perfume", "Cleaning chemicals", "Pollution / smog",
+    "Fresh-cut grass / hay", "New paint / fumes"
+  ],
+
+  // Stress and strain factors that commonly aggravate symptoms.
+  stressTriggers: [
+    "Work stress", "Emotional stress", "Physical exertion", "Overstimulation",
+    "Eye / screen strain", "Poor sleep", "Bright light / glare", "Loud noise",
+    "Dehydration", "Skipped meal"
   ],
 
   weatherCodes: {
