@@ -138,6 +138,14 @@
         <div id="logStats" class="log-stats"></div>
         <ul id="logList" class="log-list"></ul>
       </div>
+
+      <div id="trashCard" class="card" hidden>
+        <div class="card-title-row">
+          <h2 class="card-title">Recently deleted</h2>
+          <span class="muted trash-note">kept 30 days</span>
+        </div>
+        <ul id="trashList" class="log-list"></ul>
+      </div>
     </section>
 
     <!-- TRENDS -->
@@ -238,6 +246,18 @@
       <button id="wizNext" class="primary-btn grow" type="button">Next</button>
     </footer>
   </div>
+
+  <!-- Confirmation dialog (delete, etc.) -->
+  <dialog id="confirmDialog" class="dialog confirm-dialog">
+    <div class="dialog-body">
+      <h2 id="confirmTitle">Are you sure?</h2>
+      <p id="confirmBody" class="muted"></p>
+      <div class="confirm-actions">
+        <button id="confirmCancel" class="ghost-btn grow" type="button">Cancel</button>
+        <button id="confirmOk" class="primary-btn grow danger" type="button">Delete</button>
+      </div>
+    </div>
+  </dialog>
 
   <!-- Location dialog -->
   <dialog id="locationDialog" class="dialog">

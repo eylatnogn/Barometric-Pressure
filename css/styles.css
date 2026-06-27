@@ -233,10 +233,29 @@ textarea, input[type="search"] {
 .log-sym { font-size: 14px; margin-top: 2px; }
 .log-note { font-size: 14px; color: var(--text-dim); margin-top: 2px; word-break: break-word; }
 .log-press { font-size: 13px; color: var(--text-dim); }
-.log-btns { display: flex; flex-direction: column; gap: 2px; flex: none; }
-.del-btn, .edit-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 17px; padding: 4px 8px; }
-.edit-btn { color: var(--accent); }
+/* Bigger, well-separated action buttons so they're easy to hit */
+.log-btns { display: flex; gap: 10px; flex: none; align-items: flex-start; }
+.del-btn, .edit-btn, .restore-btn, .purge-btn {
+  width: 44px; height: 44px; padding: 0; border-radius: 12px;
+  background: var(--card-2); border: 1px solid var(--line);
+  color: var(--text-dim); cursor: pointer; font-size: 19px;
+  display: flex; align-items: center; justify-content: center;
+}
+.edit-btn, .restore-btn { color: var(--accent); }
+.del-btn:active, .edit-btn:active, .restore-btn:active, .purge-btn:active { transform: translateY(1px); }
+.trash-note { font-size: 13px; }
 .settings-note { font-size: 12.5px; margin: -4px 0 0; }
+
+/* Confirmation dialog (centered, not a bottom sheet) */
+.confirm-dialog {
+  inset: 0; margin: auto; width: calc(100% - 36px); max-width: 340px;
+  height: max-content; border-radius: 18px;
+}
+.confirm-dialog .dialog-body { padding: 22px; gap: 8px; }
+.confirm-dialog h2 { font-size: 18px; }
+.confirm-actions { display: flex; gap: 10px; margin-top: 12px; }
+.ghost-btn.grow, .primary-btn.grow { flex: 1; }
+.primary-btn.danger { background: var(--bad); }
 
 /* Insight */
 .insight { font-size: 15px; line-height: 1.6; }
