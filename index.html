@@ -90,6 +90,13 @@
       </div>
 
       <div class="card">
+        <h2 class="card-title">What this could mean for you</h2>
+        <p class="card-sub">Based on your current and forecasted conditions. General guidance, not medical advice.</p>
+        <div class="outlook js-outlook"></div>
+        <div class="symptom-watch js-symptom-watch"></div>
+      </div>
+
+      <div class="card">
         <h2 class="card-title">Pressure · last 24 hours</h2>
         <div class="chart-box"><canvas id="chartNow" class="chart" aria-label="Chart of barometric pressure over the last 24 hours"></canvas></div>
       </div>
@@ -102,8 +109,8 @@
       <div class="card">
         <h2 class="card-title">What this could mean for you</h2>
         <p class="card-sub">A detailed read of your current and forecasted conditions. General guidance, not medical advice.</p>
-        <div id="outlookSummary" class="outlook"></div>
-        <div id="symptomWatch" class="symptom-watch"></div>
+        <div class="outlook js-outlook"></div>
+        <div class="symptom-watch js-symptom-watch"></div>
       </div>
 
       <div class="card">
@@ -111,7 +118,12 @@
         <p class="card-sub">Watch for steep climbs or drops — rapid changes are the usual trigger.</p>
         <div class="chart-box"><canvas id="chartForecast" class="chart" aria-label="Chart of forecast barometric pressure"></canvas></div>
       </div>
-      <div id="forecastList" class="forecast-list"></div>
+
+      <div class="card">
+        <h2 class="card-title">Hour-by-hour outlook</h2>
+        <p class="card-sub">The next 48 hours in ~6-hour blocks, with how much the pressure changes across each.</p>
+        <div id="forecastList" class="forecast-list"></div>
+      </div>
     </section>
 
     <!-- LOG (landing) -->

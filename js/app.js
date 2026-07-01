@@ -109,6 +109,7 @@
     $("#conditions").textContent = PS.config.weatherCodes[weatherData.current.code] || "—";
 
     renderAlert();
+    buildSymptomWatch();
 
     const past = weatherData.series.filter((p) => p.t.getTime() <= Date.now());
     const recent = past.slice(-24);
@@ -220,9 +221,14 @@
   // overall outlook, then render both. Each factor carries the symptoms it
   // commonly causes plus what the user has personally logged under similar days.
   function buildSymptomWatch() {
-    const box = $("#symptomWatch");
-    const outlook = $("#outlookSummary");
-    if (!weatherData) { if (outlook) outlook.innerHTML = ""; box.innerHTML = '<p class="empty">Set your location to see guidance.</p>'; return; }
+    const boxes = $$(".js-symptom-watch");
+    const outlooks = $$(".js-outlook");
+    if (!boxes.length && !outlooks.length) return;
+    if (!weatherData) {
+      outlooks.forEach((o) => (o.innerHTML = ""));
+      boxes.forEach((b) => (b.innerHTML = '<p class="empty">Set your location to see guidance.</p>'));
+      return;
+    }
 
     const cur = pressureNow();
     const F = [];
@@ -340,15 +346,12 @@
       const names = F.slice().sort((a, b) => b.w - a.w).map((f) => f.title.replace(/\s*\(AQI[^)]*\)/, "").toLowerCase());
       summary = `${F.length} factor${F.length > 1 ? "s" : ""} to watch — ${names.join(", ")}. Each is broken down below with the symptoms it can bring and what has affected you before.`;
     }
-    if (outlook) {
-      outlook.innerHTML =
-        `<span class="outlook-level" style="background:${color}">${lvl} trigger risk</span>` +
-        `<div class="outlook-summary">${summary}</div>`;
-    }
+    const outlookHTML =
+      `<span class="outlook-level" style="background:${color}">${lvl} trigger risk</span>` +
+      `<div class="outlook-summary">${summary}</div>`;
+    outlooks.forEach((o) => (o.innerHTML = outlookHTML));
 
-    if (!F.length) { box.innerHTML = ""; return; }
-    F.sort((a, b) => b.w - a.w);
-    box.innerHTML = F.map((f) => `
+    const factorsHTML = !F.length ? "" : F.sort((a, b) => b.w - a.w).map((f) => `
       <div class="watch-item ${f.level}">
         <span class="watch-icon" aria-hidden="true">${f.icon}</span>
         <div class="watch-body">
@@ -359,6 +362,7 @@
           ${f.tip ? `<div class="watch-tip">💡 ${f.tip}</div>` : ""}
         </div>
       </div>`).join("");
+    boxes.forEach((b) => (b.innerHTML = factorsHTML));
   }
 
   function renderForecast() {
@@ -397,7 +401,7 @@
       row.innerHTML = `
         <span class="when">${when}</span>
         <span class="desc">${desc}</span>
-        <span class="delta" style="color:${color}">${PS.fmtPressureDelta(b.delta, settings.pressureUnit)}</span>`;
+        <span class="delta" style="color:${color}">${PS.fmtPressureDelta(b.delta, settings.pressureUnit)} ${settings.pressureUnit}</span>`;
       list.appendChild(row);
     });
   }
