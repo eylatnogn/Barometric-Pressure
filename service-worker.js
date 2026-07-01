@@ -1,6 +1,7 @@
-/* Offline support: cache the app shell so it opens without a connection.
-   Weather requests always go to the network (and fail gracefully offline). */
-const CACHE = "pressuresense-v15";
+/* Offline support with a NETWORK-FIRST strategy: always try the live file so a
+   stale or broken cache can never brick the app; fall back to cache only when
+   offline. Weather API requests bypass the cache entirely. */
+const CACHE = "pressuresense-v16";
 const SHELL = [
   "./",
   "./index.html",
@@ -19,7 +20,12 @@ const SHELL = [
 ];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // Cache files individually so one failure can't abort the whole install.
+  e.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    await Promise.all(SHELL.map((u) => cache.add(u).catch(() => {})));
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener("activate", (e) => {
@@ -31,13 +37,23 @@ self.addEventListener("activate", (e) => {
 });
 
 self.addEventListener("fetch", (e) => {
-  const url = new URL(e.request.url);
-  // Never cache API calls — always fetch fresh weather.
+  const req = e.request;
+  const url = new URL(req.url);
+  if (req.method !== "GET") return;
+  // Weather/air API: always straight to network.
   if (url.hostname.endsWith("open-meteo.com")) return;
+  // Only manage our own origin.
+  if (url.origin !== self.location.origin) return;
 
-  // App shell: cache-first, fall back to network.
+  // Network-first: fetch fresh, update the cache, fall back to cache offline.
   e.respondWith(
-    caches.match(e.request).then((hit) => hit || fetch(e.request).catch(() => caches.match("./index.html")))
+    fetch(req)
+      .then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+        return res;
+      })
+      .catch(() => caches.match(req).then((hit) => hit || caches.match("./index.html")))
   );
 });
 
