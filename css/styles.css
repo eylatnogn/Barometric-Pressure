@@ -328,8 +328,17 @@ textarea, input[type="search"] {
   border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px; }
 .aqi-pollutants b { color: var(--text); font-weight: 600; }
 
+/* Overall outlook (forecast tab) */
+.outlook { background: var(--card-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 14px; }
+.outlook:empty { display: none; }
+.outlook-level { display: inline-block; color: #fff; font-weight: 700; font-size: 13px; padding: 4px 12px; border-radius: 999px; }
+.outlook-summary { margin-top: 8px; font-size: 15px; line-height: 1.5; }
+
 /* Symptom watch (forecast tab) */
 .symptom-watch { display: flex; flex-direction: column; gap: 10px; }
+.watch-personal { font-size: 13px; margin-top: 6px; color: var(--accent); }
+.watch-personal b { color: var(--accent); }
+.watch-tip { font-size: 13px; margin-top: 6px; color: var(--text-dim); }
 .watch-item { display: flex; gap: 12px; align-items: flex-start;
   background: var(--card-2); border: 1px solid var(--line); border-left-width: 4px; border-radius: 12px; padding: 12px 14px; }
 .watch-item.good { border-left-color: var(--good); }
