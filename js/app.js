@@ -391,7 +391,7 @@
     blocks.forEach((b) => {
       const row = document.createElement("div");
       row.className = "forecast-row";
-      const when = b.start.toLocaleString([], { weekday: "short", hour: "numeric" });
+      const when = b.start.t.toLocaleString([], { weekday: "short", hour: "numeric" });
       let desc, color;
       if (b.delta <= -3) { desc = "Notable drop — possible trigger"; color = "var(--bad)"; }
       else if (b.delta <= -1.5) { desc = "Gentle fall"; color = "var(--warn)"; }
