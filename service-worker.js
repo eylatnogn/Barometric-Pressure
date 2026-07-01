@@ -1,7 +1,7 @@
 /* Offline support with a NETWORK-FIRST strategy: always try the live file so a
    stale or broken cache can never brick the app; fall back to cache only when
    offline. Weather API requests bypass the cache entirely. */
-const CACHE = "pressuresense-v16";
+const CACHE = "pressuresense-v17";
 const SHELL = [
   "./",
   "./index.html",
