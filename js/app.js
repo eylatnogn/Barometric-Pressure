@@ -185,90 +185,178 @@
     }
   }
 
-  /* ---------- FORECAST view ---------- */
-  // Build a plain-language "what this could mean for you" list from current and
-  // forecasted conditions. Each item: { level, icon, title, text, symptoms[] }.
+  /* ---------- FORECAST view: detailed symptom analysis ---------- */
+
+  // Top symptoms the user has actually logged under a given past condition.
+  function symptomsUnder(predicate, minN = 2) {
+    const logs = PS.store.getLogs().filter(predicate);
+    if (logs.length < minN) return null;
+    const counts = {};
+    logs.forEach((l) => (l.symptoms || []).forEach((s) => (counts[s] = (counts[s] || 0) + 1)));
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 3).map((e) => e[0]);
+    return top.length ? { symptoms: top, n: logs.length } : null;
+  }
+
+  // Time of the steepest ~3h fall in the next 48h (for "when" context).
+  function steepestDrop() {
+    if (!weatherData) return null;
+    const now = Date.now();
+    const fut = weatherData.series.filter((p) => p.t.getTime() >= now - 3600e3 && p.t.getTime() <= now + 48 * 3600e3);
+    let best = null;
+    for (let i = 0; i < fut.length; i++) {
+      const later = fut.find((p) => p.t.getTime() >= fut[i].t.getTime() + 3 * 3600e3);
+      if (!later) break;
+      const d = later.pressure - fut[i].pressure;
+      if (best === null || d < best.d) best = { d, t: fut[i].t };
+    }
+    return best;
+  }
+  function whenLabel(date) {
+    return (date.getTime() - Date.now()) / 3600e3 < 1
+      ? "now" : date.toLocaleString([], { weekday: "short", hour: "numeric" });
+  }
+
+  // Analyze current + forecast conditions into weighted trigger factors and an
+  // overall outlook, then render both. Each factor carries the symptoms it
+  // commonly causes plus what the user has personally logged under similar days.
   function buildSymptomWatch() {
     const box = $("#symptomWatch");
-    if (!weatherData) { box.innerHTML = '<p class="empty">Set your location to see guidance.</p>'; return; }
+    const outlook = $("#outlookSummary");
+    if (!weatherData) { if (outlook) outlook.innerHTML = ""; box.innerHTML = '<p class="empty">Set your location to see guidance.</p>'; return; }
 
     const cur = pressureNow();
-    const items = [];
+    const F = [];
 
-    // Pressure swings over the next 24h (the main vestibular trigger).
+    // Upcoming pressure swing (next 24h) — the main vestibular trigger.
     let maxDrop = 0, maxRise = 0;
     for (const h of [3, 6, 9, 12, 18, 24]) {
       const p = pressureAtOffset(h);
       if (p == null) continue;
-      maxDrop = Math.min(maxDrop, p - cur);
-      maxRise = Math.max(maxRise, p - cur);
+      maxDrop = Math.min(maxDrop, p - cur); maxRise = Math.max(maxRise, p - cur);
     }
-    if (maxDrop <= -3) {
-      items.push({ level: "bad", icon: "📉", title: "Pressure dropping ahead",
-        text: `Up to ${PS.fmtPressureDelta(maxDrop, settings.pressureUnit)} ${settings.pressureUnit} over the next day. Falling pressure is the most common trigger.`,
-        symptoms: ["Dizziness", "Vertigo", "Migraine", "Ear pressure"] });
-    } else if (maxRise >= 4) {
-      items.push({ level: "warn", icon: "📈", title: "Pressure rising ahead",
-        text: `Up to +${PS.fmtPressureDelta(maxRise, settings.pressureUnit).replace("+","")} ${settings.pressureUnit} over the next day. Rapid changes either direction can be felt.`,
-        symptoms: ["Headache", "Sinus pressure", "Fatigue"] });
+    const drop = steepestDrop();
+    const dropWhen = drop && drop.d < -1 ? ` The steepest fall lands around ${whenLabel(drop.t)}.` : "";
+
+    if (maxDrop <= -6) {
+      F.push({ w: 3, level: "bad", icon: "📉", title: "Marked pressure drop ahead",
+        detail: `Pressure is set to fall up to ${fmtChangeMag(-maxDrop)} over the next day.${dropWhen} Fast drops are the single most common vestibular and migraine trigger.`,
+        symptoms: ["Vertigo", "Dizziness", "Migraine", "Ear fullness", "Nausea"],
+        tip: "If your clinician has given you a plan for bad days, this is a window to start it early rather than waiting.",
+        personal: symptomsUnder((l) => l.trend6h != null && l.trend6h <= -3) });
+    } else if (maxDrop <= -3) {
+      F.push({ w: 2, level: "warn", icon: "📉", title: "Pressure dropping",
+        detail: `A fall of up to ${fmtChangeMag(-maxDrop)} is expected in the next day.${dropWhen}`,
+        symptoms: ["Dizziness", "Headache", "Ear pressure", "Brain fog"],
+        tip: "Hydrate, rest when you can, and pace yourself through the change.",
+        personal: symptomsUnder((l) => l.trend6h != null && l.trend6h <= -2) });
+    } else if (maxDrop <= -1.5) {
+      F.push({ w: 1, level: "warn", icon: "📉", title: "Gentle pressure fall",
+        detail: `A mild drop of about ${fmtChangeMag(-maxDrop)} is coming — usually manageable.`,
+        symptoms: ["Mild dizziness", "Fatigue"], tip: "",
+        personal: symptomsUnder((l) => l.trend6h != null && l.trend6h <= -1.5) });
+    }
+    if (maxRise >= 5) {
+      F.push({ w: 2, level: "warn", icon: "📈", title: "Sharp pressure rise ahead",
+        detail: `Pressure climbs up to ${fmtChangeMag(maxRise)} over the next day. Rapid rises are felt too, especially in the ears and sinuses.`,
+        symptoms: ["Ear pressure", "Sinus pressure", "Headache"],
+        tip: "Yawning, swallowing, or chewing gum can help your ears equalize.",
+        personal: symptomsUnder((l) => l.trend6h != null && l.trend6h >= 3) });
     }
 
-    // Absolute low pressure.
-    if (cur < 1005) {
-      items.push({ level: "warn", icon: "🌧️", title: "Low pressure system",
-        text: "Pressure is on the low side, often with unsettled or stormy weather.",
-        symptoms: ["Joint aches", "Headache", "Low energy"] });
+    // Absolute low pressure over the next day.
+    const minFuture = Math.min(cur, pressureAtOffset(6) ?? cur, pressureAtOffset(12) ?? cur, pressureAtOffset(24) ?? cur);
+    if (minFuture < 1000) {
+      F.push({ w: 2, level: "bad", icon: "🌀", title: "Deep low-pressure system",
+        detail: `Pressure dips to about ${PS.fmtPressure(minFuture, settings.pressureUnit)} ${settings.pressureUnit} — a stormy, low-pressure pattern that can linger.`,
+        symptoms: ["Vertigo", "Joint aches", "Headache", "Low energy"],
+        tip: "Low, stormy spells can drag on — plan lighter days if you're able.",
+        personal: symptomsUnder((l) => l.pressure != null && l.pressure < 1005) });
+    } else if (minFuture < 1008) {
+      F.push({ w: 1, level: "warn", icon: "🌧️", title: "Below-average pressure",
+        detail: `Pressure sits around ${PS.fmtPressure(minFuture, settings.pressureUnit)} ${settings.pressureUnit} — on the low, unsettled side.`,
+        symptoms: ["Headache", "Fatigue", "Sinus pressure"], tip: "",
+        personal: symptomsUnder((l) => l.pressure != null && l.pressure < 1008) });
     }
 
-    // Humidity (from current conditions).
+    // Humidity.
     const hum = weatherData.current.humidity;
-    if (hum >= 80) {
-      items.push({ level: "warn", icon: "💧", title: "High humidity",
-        text: `Humidity around ${Math.round(hum)}%. Muggy air can add to that heavy, off-balance feeling.`,
-        symptoms: ["Dizziness", "Fatigue", "Breathlessness"] });
-    } else if (hum <= 30) {
-      items.push({ level: "warn", icon: "🏜️", title: "Very dry air",
-        text: `Humidity around ${Math.round(hum)}%. Dry air can irritate sinuses and airways.`,
-        symptoms: ["Dry sinuses", "Headache"] });
+    if (hum >= 90) {
+      F.push({ w: 2, level: "warn", icon: "💧", title: "Very high humidity",
+        detail: `Humidity around ${Math.round(hum)}%. Heavy, muggy air often worsens that off-balance, heavy-headed feeling.`,
+        symptoms: ["Dizziness", "Fatigue", "Breathlessness", "Nausea"],
+        tip: "Seek cool, well-ventilated spaces and sip water.",
+        personal: symptomsUnder((l) => l.humidity != null && l.humidity >= 80) });
+    } else if (hum >= 80) {
+      F.push({ w: 1, level: "warn", icon: "💧", title: "High humidity",
+        detail: `Humidity around ${Math.round(hum)}% — muggy enough that some people notice it.`,
+        symptoms: ["Dizziness", "Fatigue"], tip: "",
+        personal: symptomsUnder((l) => l.humidity != null && l.humidity >= 75) });
+    } else if (hum <= 25) {
+      F.push({ w: 1, level: "warn", icon: "🏜️", title: "Very dry air",
+        detail: `Humidity around ${Math.round(hum)}%. Dry air can irritate sinuses and dehydrate you faster.`,
+        symptoms: ["Dry sinuses", "Headache"], tip: "Drink extra water; a humidifier can help." });
     }
 
     // Temperature swing over the next 24h.
     const temps = weatherData.series
-      .filter((p) => p.t.getTime() >= Date.now() && p.t.getTime() <= Date.now() + 24 * 3600000)
+      .filter((p) => p.t.getTime() >= Date.now() && p.t.getTime() <= Date.now() + 24 * 3600e3)
       .map((p) => p.temp).filter((t) => t != null);
     if (temps.length) {
       const swing = Math.max(...temps) - Math.min(...temps);
-      if (swing >= 12) {
-        items.push({ level: "warn", icon: "🌡️", title: "Big temperature swing",
-          text: `About ${Math.round(swing)}°C between the day's high and low. Sharp temperature changes can set off symptoms.`,
-          symptoms: ["Headache", "Fatigue"] });
+      if (swing >= 16) {
+        F.push({ w: 2, level: "warn", icon: "🌡️", title: "Large temperature swing",
+          detail: `About ${Math.round(swing)}°C between today's high and low. Big temperature shifts can set off head and sinus symptoms.`,
+          symptoms: ["Headache", "Sinus pressure", "Fatigue"], tip: "Layer up or down to smooth the transition." });
+      } else if (swing >= 12) {
+        F.push({ w: 1, level: "warn", icon: "🌡️", title: "Notable temperature swing",
+          detail: `About ${Math.round(swing)}°C from high to low today.`, symptoms: ["Headache", "Fatigue"], tip: "" });
       }
     }
 
     // Air quality.
     const aqi = airData && airData.current ? airData.current.aqi : null;
-    if (aqi != null && aqi > 100) {
-      const cat = PS.aqiCategory(aqi);
-      items.push({ level: aqi > 150 ? "bad" : "warn", icon: "🌫️", title: `Air quality: ${cat.label} (AQI ${Math.round(aqi)})`,
-        text: cat.note, symptoms: ["Headache", "Fatigue", "Throat/eye irritation"] });
+    if (aqi != null && aqi > 150) {
+      F.push({ w: 3, level: "bad", icon: "🌫️", title: `Unhealthy air (AQI ${Math.round(aqi)})`,
+        detail: PS.aqiCategory(aqi).note, symptoms: ["Headache", "Fatigue", "Throat/eye irritation", "Chest tightness"],
+        tip: "Keep windows shut and limit time outdoors; use filtered air if you can.",
+        personal: symptomsUnder((l) => l.aqi != null && l.aqi > 100) });
+    } else if (aqi != null && aqi > 100) {
+      F.push({ w: 2, level: "warn", icon: "🌫️", title: `Poor air quality (AQI ${Math.round(aqi)})`,
+        detail: PS.aqiCategory(aqi).note, symptoms: ["Headache", "Fatigue", "Irritated eyes/throat"],
+        tip: "Sensitive people may want to limit outdoor exertion.",
+        personal: symptomsUnder((l) => l.aqi != null && l.aqi > 80) });
     }
 
-    if (!items.length) {
-      box.innerHTML =
-        '<div class="watch-item good"><span class="watch-icon">🌤️</span><div class="watch-body">' +
-        '<div class="watch-title">Conditions look calm</div>' +
-        '<div class="watch-text">No major pressure swings, humidity, temperature, or air-quality triggers in the next day. A good window if you\'re sensitive.</div>' +
-        '</div></div>';
-      return;
+    // Overall outlook from the combined weight of factors.
+    const score = F.reduce((s, f) => s + f.w, 0);
+    let lvl, color, summary;
+    if (score === 0) {
+      lvl = "Low"; color = "var(--good)";
+      summary = "Conditions look calm — no major pressure, humidity, temperature, or air-quality triggers in the next day. A good window if you're sensitive.";
+    } else {
+      if (score <= 2) { lvl = "Moderate"; color = "var(--warn)"; }
+      else if (score <= 4) { lvl = "Elevated"; color = "#e8731a"; }
+      else { lvl = "High"; color = "var(--bad)"; }
+      const names = F.slice().sort((a, b) => b.w - a.w).map((f) => f.title.replace(/\s*\(AQI[^)]*\)/, "").toLowerCase());
+      summary = `${F.length} factor${F.length > 1 ? "s" : ""} to watch — ${names.join(", ")}. Each is broken down below with the symptoms it can bring and what has affected you before.`;
+    }
+    if (outlook) {
+      outlook.innerHTML =
+        `<span class="outlook-level" style="background:${color}">${lvl} trigger risk</span>` +
+        `<div class="outlook-summary">${summary}</div>`;
     }
 
-    box.innerHTML = items.map((it) => `
-      <div class="watch-item ${it.level}">
-        <span class="watch-icon" aria-hidden="true">${it.icon}</span>
+    if (!F.length) { box.innerHTML = ""; return; }
+    F.sort((a, b) => b.w - a.w);
+    box.innerHTML = F.map((f) => `
+      <div class="watch-item ${f.level}">
+        <span class="watch-icon" aria-hidden="true">${f.icon}</span>
         <div class="watch-body">
-          <div class="watch-title">${it.title}</div>
-          <div class="watch-text">${it.text}</div>
-          <div class="watch-sym">Possible: <b>${it.symptoms.join(", ")}</b></div>
+          <div class="watch-title">${f.title}</div>
+          <div class="watch-text">${f.detail}</div>
+          <div class="watch-sym">Commonly linked to: <b>${f.symptoms.join(", ")}</b></div>
+          ${f.personal ? `<div class="watch-personal">Your history: you've logged <b>${f.personal.symptoms.join(", ")}</b> on ${f.personal.n} day${f.personal.n > 1 ? "s" : ""} with similar conditions.</div>` : ""}
+          ${f.tip ? `<div class="watch-tip">💡 ${f.tip}</div>` : ""}
         </div>
       </div>`).join("");
   }
